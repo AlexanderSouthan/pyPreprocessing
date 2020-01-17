@@ -9,6 +9,7 @@ to do:
     - rubberband durchtesten (konkave und konvexe Spektren testen, Spektren mit großer Bandbreite an Intensitäten
       kokave Spektren evtl. durch concave hull: https://pdfs.semanticscholar.org/2397/17005c3ebd5d6a42fc833daf97a0edee1ce4.pdf
       und https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
+      evtl tranformieren (LLS?) vor Korrektur. 
     - Test methods for ascending and descending wavenumbers
 
 """
@@ -21,8 +22,8 @@ from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
 
-def rubberband_baseline(raw_data, wavenumbers, smoothing=True):
-    """based on (but improved a lot)
+def convex_hull_baseline(raw_data, wavenumbers, smoothing=True):
+    """based on (but improved a bit)
     https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
     """
 
@@ -30,7 +31,7 @@ def rubberband_baseline(raw_data, wavenumbers, smoothing=True):
         raw_data = np.around(savgol_filter(raw_data, 19, 2, deriv=0, axis=1),
                              decimals=6)
 
-    rubberband_baseline_data = np.empty_like(raw_data)
+    convex_hull_baseline_data = np.empty_like(raw_data)
 
     for ii, current_spectrum in enumerate(tqdm(raw_data)):
         hull_vertices = ConvexHull(np.array(list(zip(wavenumbers, current_spectrum)))).vertices
@@ -45,14 +46,14 @@ def rubberband_baseline(raw_data, wavenumbers, smoothing=True):
 
         # Select lower vertices as baseline vertices
         if raw_mean_1 > raw_mean_2:
-            correct_vertices = hull_vertices_section_2
+            baseline_vertices = hull_vertices_section_2
         else:
-            correct_vertices = hull_vertices_section_1
-        
-        # Create baseline using linear interpolation between vertices
-        rubberband_baseline_data[ii, :] = np.interp(wavenumbers, np.flip(wavenumbers[correct_vertices]), np.flip(current_spectrum[correct_vertices]))
+            baseline_vertices = hull_vertices_section_1
 
-    return np.around(rubberband_baseline_data, decimals=6)
+        # Create baseline using linear interpolation between vertices
+        convex_hull_baseline_data[ii, :] = np.interp(wavenumbers, np.flip(wavenumbers[baseline_vertices]), np.flip(current_spectrum[baseline_vertices]))
+
+    return np.around(convex_hull_baseline_data, decimals=6)
 
 
 def ALSS_baseline(raw_data, lam, p, n_iter, conv_crit=0.001, smoothing=True):
