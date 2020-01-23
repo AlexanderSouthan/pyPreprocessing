@@ -13,6 +13,7 @@ to do:
       und https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
     - Test methods for ascending and descending wavenumbers
     - Negative Peaks berücksichtigen
+    - Konvergenzkriterium für alle hinzufügen
 
 """
 
@@ -48,7 +49,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         dataset. If only one dataset is given, it has to have the shape (1, M).
     mode: str
         Algorithm for baseline calculation. Allowed values:
-        'convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP','IModPoly'.
+        'convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP', 'ModPoly', 'IModPoly'.
     smoothing: bool
         True if datasets should be smoothed before calculation (recommended),
         otherwise False.
@@ -104,7 +105,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
     SNIP:
         n_iter: int
             default=100
-    IModPoly:
+    ModPoly, IModPoly:
         wavenumbers: ndarray
             Numpy array containing wavenumbers or wavelengths of datasets.
             Must have M elements. default=np.arange(M)
@@ -333,11 +334,10 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 if mode == baseline_modes[5]:  # ModPoly
                     residual = current_spectrum - fit_data
                     dev = 0#residual.std()
+                    # if abs((dev - previous_dev)/dev) < 0.01:
+                    #    break
                 else:  #IModPoly
                     dev = residual.std()
-
-                if abs((dev - previous_dev)/dev) < 0.01:
-                    break
 
                 if jj == 0:
                     mask = (current_spectrum <= fit_data + dev)
@@ -346,7 +346,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                     fit_data = fit_data[mask]
                 np.copyto(current_spectrum, fit_data + dev,
                           where=(current_spectrum >= (fit_data+dev)))
-                previous_dev = dev
+                #previous_dev = dev
 
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
