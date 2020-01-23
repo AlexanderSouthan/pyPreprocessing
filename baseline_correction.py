@@ -320,7 +320,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         #############################
 
         wavenumbers_start = wavenumbers
-        previous_dev = 0
+        # previous_dev = 0
 
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
             wavenumbers = wavenumbers_start
@@ -332,12 +332,12 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                                                             fit_coeffs)
 
                 if mode == baseline_modes[5]:  # ModPoly
+                    dev = 0
+                else:  #IModPoly
                     residual = current_spectrum - fit_data
-                    dev = 0#residual.std()
+                    dev = residual.std()
                     # if abs((dev - previous_dev)/dev) < 0.01:
                     #    break
-                else:  #IModPoly
-                    dev = residual.std()
 
                 if jj == 0:
                     mask = (current_spectrum <= fit_data + dev)
@@ -346,7 +346,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                     fit_data = fit_data[mask]
                 np.copyto(current_spectrum, fit_data + dev,
                           where=(current_spectrum >= (fit_data+dev)))
-                #previous_dev = dev
+                # previous_dev = dev
 
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
