@@ -14,6 +14,7 @@ to do:
     - Test methods for ascending and descending wavenumbers
     - Negative Peaks berücksichtigen
     - Konvergenzkriterium für alle hinzufügen
+    - Transformationen hinzufügen
 
 """
 
