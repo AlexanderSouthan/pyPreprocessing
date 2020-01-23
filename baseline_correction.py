@@ -14,8 +14,6 @@ to do:
     - Test methods for ascending and descending wavenumbers
     - Negative Peaks berücksichtigen
     - Konvergenzkriterium für alle hinzufügen
-    - Transformationen hinzufügen
-    - ggf. für Spektren in Spalten anpassen
 
 """
 
@@ -51,7 +49,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         dataset. If only one dataset is given, it has to have the shape (1, M).
     mode: str
         Algorithm for baseline calculation. Allowed values:
-        'convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP', 'ModPoly', 'IModPoly'.
+        'convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP', 'ModPoly', 'IModPoly',
+        'PPF'.
     smoothing: bool
         True if datasets should be smoothed before calculation (recommended),
         otherwise False.
@@ -115,6 +114,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             default=100
         poly_order: int
             default=5
+    PPF
+    
     """
 
     if smoothing:
@@ -130,7 +131,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
     baseline_data = np.zeros_like(raw_data)
     baseline_modes = ['convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP',
-                      'ModPoly', 'IModPoly']
+                      'ModPoly', 'IModPoly','PPF']
 
     if mode == baseline_modes[0]:  # convex_hull
         # based on (but improved a bit)
@@ -352,6 +353,35 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
+            
+    elif mode == baseline_modes[7]:  # PPF
+        # according to Photonic Sensors 2018, 8(4), 332-340.
+        
+        # set mode specific parameters
+        # wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
+        # n_iter = kwargs.get('n_iter', 100)
+        savgol_window_deriv = 19
+        savgol_order_deriv = 2
+        slope_threshold = 5
+        segment_points = 20
+        poly_order = kwargs.get('poly_order', 5)
+        #############################
+        raw_data_derivative = np.around(
+                savgol_filter(raw_data, savgol_window_deriv,
+                              savgol_order_deriv, deriv=1, axis=1), decimals=6)
+        derivative_sign_changes = np.diff(
+                np.sign(raw_data_derivative), axis=1,
+                append=raw_data_derivative[:, -1, np.newaxis])
+        # peak_maxima = (derivative_sign_changes == -2)
+        peak_boundaries = (derivative_sign_changes == 2)
+#        check_points = np.roll(peak_boundaries, segment_points, axis=1)
+        
+        deriv_diffs = raw_data_derivative - np.roll(raw_data_derivative, segment_points, axis=1)
+        deriv_diffs_at_peak_bounds = np.abs(deriv_diffs * peak_boundaries)  # np.roll(peak_boundaries, segment_points, axis=1))
+        segment_points = (deriv_diffs_at_peak_bounds < slope_threshold) & (deriv_diffs_at_peak_bounds > 0)
+        
+        
+        return segment_points
 
     else:
         raise ValueError('No valid baseline mode entered. Allowed modes are{0}'.format(baseline_modes))
