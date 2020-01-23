@@ -127,7 +127,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
     baseline_data = np.zeros_like(raw_data)
     baseline_modes = ['convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP',
-                      'IModPoly']
+                      'ModPoly', 'IModPoly']
 
     if mode == baseline_modes[0]:  # convex_hull
         # based on (but improved a bit)
@@ -307,7 +307,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
         baseline_data = raw_data
 
-    elif mode == baseline_modes[5]:  # IModPoly
+    elif mode in baseline_modes[5:7]:  # ModPoly, IModPoly
         # according to Applied Spectroscopy, 2007, 61 (11), 1225-1232.
         # without dev: Chemometrics and Intelligent Laboratory Systems 82 (2006) 59– 65.
         #               Maybe also ModPoly from first source?
@@ -330,11 +330,14 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 fit_data = np.polynomial.polynomial.polyval(wavenumbers,
                                                             fit_coeffs)
 
-                residual = current_spectrum - fit_data
-                dev = 0#residual.std()
+                if mode == baseline_modes[5]:  # ModPoly
+                    residual = current_spectrum - fit_data
+                    dev = 0#residual.std()
+                else:  #IModPoly
+                    dev = residual.std()
 
-                #if abs((dev - previous_dev)/dev) < 0.01:
-                #    break
+                if abs((dev - previous_dev)/dev) < 0.01:
+                    break
 
                 if jj == 0:
                     mask = (current_spectrum <= fit_data + dev)
