@@ -15,6 +15,7 @@ to do:
     - Negative Peaks berücksichtigen
     - Konvergenzkriterium für alle hinzufügen
     - Transformationen hinzufügen
+    - ggf. für Spektren in Spalten anpassen
 
 """
 
