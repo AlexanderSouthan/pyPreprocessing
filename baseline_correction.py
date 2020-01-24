@@ -356,7 +356,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             
     elif mode == baseline_modes[7]:  # PPF
         # according to Photonic Sensors 2018, 8(4), 332-340.
-        
+
         # set mode specific parameters
         # wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
         # n_iter = kwargs.get('n_iter', 100)
@@ -375,7 +375,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         # peak_maxima = (derivative_sign_changes == -2)
         peak_boundaries = (derivative_sign_changes == 2)
 #        check_points = np.roll(peak_boundaries, segment_points, axis=1)
-        
+
         deriv_diffs = raw_data_derivative - np.roll(raw_data_derivative, segment_points, axis=1)
         deriv_diffs_at_peak_bounds = np.abs(deriv_diffs * peak_boundaries)  # np.roll(peak_boundaries, segment_points, axis=1))
         segment_points = (deriv_diffs_at_peak_bounds < slope_threshold) & (deriv_diffs_at_peak_bounds > 0)
