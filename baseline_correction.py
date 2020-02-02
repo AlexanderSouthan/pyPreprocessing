@@ -4,12 +4,12 @@ Provides functions correct_baseline and generate_baseline which can be used for
 baseline preprocessing of spectral data. See function docstrings for more
 detail.
 
-@author: Snijderfrey
-
 to do:
     - Für ein einzelnes Spektrum testen
-    - rubberband durchtesten (konkave und konvexe Spektren testen, Spektren mit großer Bandbreite an Intensitäten
-      kokave Spektren evtl. durch concave hull: https://pdfs.semanticscholar.org/2397/17005c3ebd5d6a42fc833daf97a0edee1ce4.pdf
+    - rubberband durchtesten (konkave und konvexe Spektren testen,
+                              Spektren mit großer Bandbreite an Intensitäten
+      kokave Spektren evtl. durch concave hull:
+          https://pdfs.semanticscholar.org/2397/17005c3ebd5d6a42fc833daf97a0edee1ce4.pdf
       und https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
     - Test methods for ascending and descending wavenumbers
     - Negative Peaks berücksichtigen
@@ -23,6 +23,9 @@ from scipy.signal import savgol_filter
 from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
+
+from transform import transform as transform_spectra
+from smoothing import smoothing as smooth_spectra
 
 
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
@@ -64,6 +67,10 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         window size for Savitzky-Golay window, default=19.
     savgol_order: int
         polynomial order for Savitzky-Golay filter, default=2.
+
+    kwargs for transform == True
+    ---------------------------
+    currently none, but will to be added in future versions.
 
     kwargs for different baseline modes:
     ------------------------------------
@@ -115,23 +122,23 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         poly_order: int
             default=5
     PPF
-    
+        THIS IS STILL MISSING
     """
 
-    if smoothing:
-        savgol_window = kwargs.get('savgol_window', 19)
+    if smoothing:  # currently Savitzky-Golay only
+        savgol_window = kwargs.get('savgol_window', 9)
         savgol_order = kwargs.get('savol_order', 2)
-        raw_data = np.around(savgol_filter(raw_data, savgol_window,
-                                           savgol_order, deriv=0, axis=1),
-                             decimals=6)
-    if transform:  # currently LLS transformation
-        spectra_minimum_value = np.min(raw_data)
-        raw_data = raw_data - spectra_minimum_value
-        raw_data = np.log(np.log(np.sqrt(raw_data + 1)+1)+1)
+        raw_data = smooth_spectra(raw_data, 'sav_gol',
+                                  savgol_points=savgol_window,
+                                  poly_order=savgol_order)
+
+    if transform:  # currently LLS transformation only
+        spectra_minimum_value = raw_data.min()
+        raw_data = transform_spectra(raw_data, 'log_log_sqrt')
 
     baseline_data = np.zeros_like(raw_data)
     baseline_modes = ['convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP',
-                      'ModPoly', 'IModPoly','PPF']
+                      'ModPoly', 'IModPoly', 'PPF']
 
     if mode == baseline_modes[0]:  # convex_hull
         # based on (but improved a bit)
@@ -147,8 +154,11 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             # Rotate convex hull vertices until they start from the lowest one
             hull_vertices = np.roll(hull_vertices, -np.argmin(hull_vertices))
             # split vertices into upper and lower part
-            hull_vertices_section_1 = hull_vertices[:np.argmax(hull_vertices)+1]
-            hull_vertices_section_2 = np.sort(np.insert(hull_vertices[np.argmax(hull_vertices):], 0, hull_vertices[0]))
+            hull_vertices_section_1 = hull_vertices[:np.argmax(hull_vertices)
+                                                    + 1]
+            hull_vertices_section_2 = np.sort(
+                np.insert(hull_vertices[np.argmax(hull_vertices):], 0,
+                          hull_vertices[0]))
             # calculate spectrum mean intensities of upper and lower vertices
             raw_mean_1 = np.mean(current_spectrum[hull_vertices_section_1])
             raw_mean_2 = np.mean(current_spectrum[hull_vertices_section_2])
@@ -160,7 +170,9 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 baseline_vertices = hull_vertices_section_1
 
             # Create baseline using linear interpolation between vertices
-            baseline_data[ii, :] = np.interp(wavenumbers, np.flip(wavenumbers[baseline_vertices]), np.flip(current_spectrum[baseline_vertices]))
+            baseline_data[ii, :] = np.interp(
+                wavenumbers, np.flip(wavenumbers[baseline_vertices]),
+                np.flip(current_spectrum[baseline_vertices]))
 
     elif mode == baseline_modes[1]:  # ALSS
         # according to
@@ -192,7 +204,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 z_prev = z
                 z = spsolve(Z, w*current_spectrum, permc_spec='NATURAL')
                 if np.linalg.norm(z - z_prev) > conv_crit:
-                    w = p * (current_spectrum > z) + (1-p) * (current_spectrum < z)
+                    w = p * (current_spectrum > z) + (1-p) * (
+                        current_spectrum < z)
                 else:
                     break
             # end of fitting procedure
@@ -237,7 +250,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 z_prev = z
                 z = spsolve(Z, R, permc_spec='NATURAL')
                 if np.linalg.norm(z - z_prev) > conv_crit:
-                    w = p * (current_spectrum > z) + (1-p) * (current_spectrum < z)
+                    w = p * (current_spectrum > z) + (1-p) * (
+                        current_spectrum < z)
                 else:
                     break
             # end of fitting procedure
@@ -281,7 +295,11 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                     d_negative = d[d < 0]
                     sigma_negative = np.std(d_negative)
                     mean_negative = np.mean(d_negative)
-                    w = 0.5 * (1 - np.exp(jj) * (d - (-mean_negative + 2*sigma_negative))/sigma_negative / (1 + np.abs(np.exp(jj) * (d - (-mean_negative + 2*sigma_negative))/sigma_negative)))
+                    w = 0.5 * (1 - np.exp(jj) * (d - (
+                        -mean_negative + 2*sigma_negative))/sigma_negative / (
+                            1 + np.abs(np.exp(jj) * (d - (
+                                - mean_negative + 2 * sigma_negative)) /
+                                sigma_negative)))
                 else:
                     break
             # end of fitting procedure
@@ -313,8 +331,9 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
     elif mode in baseline_modes[5:7]:  # ModPoly, IModPoly
         # according to Applied Spectroscopy, 2007, 61 (11), 1225-1232.
-        # without dev: Chemometrics and Intelligent Laboratory Systems 82 (2006) 59– 65.
-        #               Maybe also ModPoly from first source?
+        # without dev: Chemometrics and Intelligent Laboratory Systems 82
+        #              (2006) 59– 65.
+        #              Maybe also ModPoly from first source?
 
         # set mode specific parameters
         wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
@@ -336,7 +355,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
                 if mode == baseline_modes[5]:  # ModPoly
                     dev = 0
-                else:  #IModPoly
+                else:  # IModPoly
                     residual = current_spectrum - fit_data
                     dev = residual.std()
                     # if abs((dev - previous_dev)/dev) < 0.01:
@@ -353,7 +372,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
-            
+
+    # not functional yet
     elif mode == baseline_modes[7]:  # PPF
         # according to Photonic Sensors 2018, 8(4), 332-340.
 
@@ -376,16 +396,19 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         peak_boundaries = (derivative_sign_changes == 2)
 #        check_points = np.roll(peak_boundaries, segment_points, axis=1)
 
-        deriv_diffs = raw_data_derivative - np.roll(raw_data_derivative, segment_points, axis=1)
+        deriv_diffs = raw_data_derivative - np.roll(
+            raw_data_derivative, segment_points, axis=1)
         deriv_diffs_at_peak_bounds = np.abs(deriv_diffs * peak_boundaries)  # np.roll(peak_boundaries, segment_points, axis=1))
         segment_points = (deriv_diffs_at_peak_bounds < slope_threshold) & (deriv_diffs_at_peak_bounds > 0)
-        
-        
+
         return segment_points
 
     else:
-        raise ValueError('No valid baseline mode entered. Allowed modes are{0}'.format(baseline_modes))
+        raise ValueError('No valid baseline mode entered. Allowed modes are '
+                         '{0}'.format(baseline_modes))
 
     if transform:
-        baseline_data = (np.exp(np.exp(raw_data)-1)-1)**2 - 1 + spectra_minimum_value
+        baseline_data = transform_spectra(baseline_data, 'log_log_sqrt',
+                                  direction='inverse',
+                                  min_value=spectra_minimum_value)
     return np.around(baseline_data, decimals=6)
