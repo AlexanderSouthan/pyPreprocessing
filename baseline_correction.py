@@ -24,8 +24,8 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
-from transform import transform as transform_spectra
-from smoothing import smoothing as smooth_spectra
+from .transform import transform as transform_spectra
+from .smoothing import smoothing as smooth_spectra
 
 
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
@@ -408,7 +408,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                          '{0}'.format(baseline_modes))
 
     if transform:
-        baseline_data = transform_spectra(baseline_data, 'log_log_sqrt',
-                                  direction='inverse',
-                                  min_value=spectra_minimum_value)
+        baseline_data = transform_spectra(
+            baseline_data, 'log_log_sqrt', direction='inverse',
+            min_value=spectra_minimum_value)
+
     return np.around(baseline_data, decimals=6)
