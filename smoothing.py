@@ -35,6 +35,9 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
     **kwargs for interpolate=True
         x_coordinate : ndarray
             1D numpy array with shape (M,) used for interpolation.
+        data_points : int
+            number of data points returned after interpolation. Default is one
+            order of magnitude more than M.
     **kwargs for different smoothing modes
         sav_gol:
             deriv : int
@@ -72,11 +75,12 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
     if interpolate:
         x_coordinate = kwargs.get('x_coordinate', np.linspace(
             0, 1000, raw_data.shape[1]))
-        data_points_magnitude = np.ceil(np.log10(len(x_coordinate)))
+        data_points = kwargs.get('data_points',
+                                 int(10**np.ceil(np.log10(len(x_coordinate)))))
 
         itp = interp1d(x_coordinate, raw_data, kind='linear')
         x_interpolated = np.linspace(x_coordinate[0], x_coordinate[-1],
-                                     int(10**data_points_magnitude))
+                                     data_points)
         raw_data = itp(x_interpolated)
 
     # Optional extension of smoothed data by point mirrored raw data.
@@ -85,6 +89,7 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
             ((-np.flip(raw_data, axis=1)+2*raw_data[:, 0, np.newaxis])[:, :-1],
              raw_data, (-np.flip(raw_data, axis=1) +
                         2*raw_data[:, -1, np.newaxis])[:, 1:]), axis=1)
+        #raw_data = np.concatenate((-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[0],np.squeeze(raw_data.T),-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[-1]))[np.newaxis]
 
     smoothing_modes = ['sav_gol', 'rolling_median', 'pca']
 
@@ -129,6 +134,7 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
 
     # Removal of previously added point mirrored data.
     if point_mirror:
+        #smoothed_data = np.split(np.squeeze(smoothed_data.T),3)[1][np.newaxis]
         smoothed_data = smoothed_data[
             :, int(np.ceil(smoothed_data.shape[1]/3)-1):
                 int(2*np.ceil(smoothed_data.shape[1]/3)-1)]
