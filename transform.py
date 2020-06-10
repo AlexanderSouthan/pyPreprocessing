@@ -68,3 +68,20 @@ def transform(raw_data, mode, direction='direct', **kwargs):
                          'directions are [\'direct\', \'inverse\']')
 
     return raw_data
+
+
+def normalize(raw_data, mode, factor=1, **kwargs):
+    # list of allowed modes for normalization
+    normalize_modes = ['total_intensity']
+    
+    if mode == normalize_modes[0]:
+        x_data_points = raw_data.shape[1]
+        x_data = kwargs.get('x_data', np.arange(x_data_points))
+        conversion_factor = 1/np.repeat(np.trapz(raw_data, x=x_data, axis=1), x_data_points).reshape((-1, x_data_points))
+        
+        normalized_data = raw_data * conversion_factor * factor
+    else:
+        raise ValueError('No valid normalization mode entered. Allowed modes '
+                             'are {0}'.format(transform_modes))
+        
+    return normalized_data
