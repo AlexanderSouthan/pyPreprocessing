@@ -40,7 +40,7 @@ are:
 ## Transformation (in transform.py)
 Contains methods to apply or undo a transformation on the input data. 
 Currently, the only implemented method is:
-* LLS, which means log(log(sqrt(innput_data)))
+* LLS, which means log(log(sqrt(input_data)))
 
 ## Normalization (in transform.py)
 Normalize the input data. Currently only one method is implemented:
