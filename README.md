@@ -16,7 +16,7 @@ that it is an improved ALSS method.
 **1988**, *934*, 396-402.
 * ModPoly and IModPoly, algorithms based on polynomial fitting as described in
 *Applied Spectroscopy*, **2007**, *61* (11), 1225-1232 and
-Chemometrics and Intelligent Laboratory Systems, **2006**, *82*, 59– 65.
+*Chemometrics and Intelligent Laboratory Systems*, **2006**, *82*, 59– 65.
 * Convex hull (based on https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data)
 
 ## Smoothing (in smooting.py)
