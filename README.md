@@ -3,7 +3,7 @@ For preprocessing of datasets, currently via baseline correction, smoothing,
 filtering, transformation, and normalization. It relies on numpy, pandas,
 scipy, tqdm and scikit-learn.
 
-##Baseline correction (in baseline_correction.py)
+## Baseline correction (in baseline_correction.py)
 Before baseline correction, data can be smoothed or tranformed by methods
 described below. Implemented baseline correction methods are:
 *Asymmetric Least Squares Smoothing (ALSS) described by P. Eilers and H.Boelens
