@@ -204,9 +204,7 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
     """
     Filters data rows with different algorithms.
 
-    Filters are applied in the order maximum, minimum. The filtered
-    data is stored in self.ibi_1d_processed. Filtered values are replaced
-    by np.nan.
+    Filtered values are replaced by np.nan.
 
     Parameters
     ----------
