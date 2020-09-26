@@ -25,9 +25,9 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
     mode : str
         Algorithm used for smoothing. Allowed modes are 'sav_gol' for Savitzky-
         Golay, 'rolling_median' for a median filter, 'pca' for smoothing based
-        on principal component analysis, 'selective_moving_average' for a
-        moving average that can decide if values in the window are used for
-        averaging.
+        on principal component analysis, 'weighted_moving_average' for a
+        moving average that uses weights, so e.g. can decide if values in the
+        window are used for or excluded from averaging.
     interpolate : boolean
         False if x coordinate is evenly spaced. True if x coordinate is not
         evenly spaced, then raw_data is interpolated to an evenly spaced
@@ -63,12 +63,13 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
             pca_components : int
                 Number of principal components used to reconstruct the original
                 data. Default is 5.
-        selective_moving_average:
-            weights : list of bool
+        weighted_moving_average:
+            weights : list of float
                 The number of entries decide the window length used for
-                smoothing. True means that the value is used, False means the
-                value is excluded, e.g. [True, False, True] is a window of size
-                3 in which the center point is exluded from the calculations.
+                smoothing. A value > 0 means that the value is used with the
+                specified weight, a value of 0 means the value is excluded,
+                e.g. [1, 0, 1] is a window of size 3 in which the center point
+                is exluded from the calculations. Default is [1, 1, 0, 1, 1].
 
     Returns
     -------
@@ -77,7 +78,7 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         raw_data if interpolate is false. Else tuple containing interpolated
         x coordinates and 2D numpy array in the shape of
         (N,10**np.ceil(np.log10(len(x_coordinate)))). In case of mode is
-        selective_moving_average, the corresponding standard deviations are
+        weighted_moving_average, the corresponding standard deviations are
         also calulated and a tuple with the smoothed data and the standard
         deviations is returned.
 
@@ -105,7 +106,8 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         #raw_data = np.concatenate((-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[0],np.squeeze(raw_data.T),-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[-1]))[np.newaxis]
         print(raw_data)
 
-    smoothing_modes = ['sav_gol', 'rolling_median', 'pca', 'selective_moving_average']
+    smoothing_modes = ['sav_gol', 'rolling_median', 'pca',
+                       'weighted_moving_average']
 
     if mode == smoothing_modes[0]:  # sav_gol
         deriv = kwargs.get('deriv', 0)
@@ -142,8 +144,8 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         smoothed_data = (
             np.dot(scores, loadings) + np.mean(raw_data, axis=0))
 
-    elif mode == smoothing_modes[3]:  # selective_moving_average
-        weights = kwargs.get('weights', [True, True, False, True, True])
+    elif mode == smoothing_modes[3]:  # weighted_moving_average
+        weights = kwargs.get('weights', [1, 1, 0, 1, 1])
 
         window_size = len(weights)
         value_count = raw_data.shape[1]
@@ -153,12 +155,15 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         column_indices = np.repeat(
             np.arange(window_size)[np.newaxis], remaining_values, axis=0
             ) + np.arange(remaining_values)[:, np.newaxis]
-        column_indices = column_indices[:, weights]
+        # column_indices = column_indices[:, weights]
 
+        # the following step multiplies the total value number with
+        # window_size, so might be problematic for large datasets
         value_array = np.squeeze(raw_data[np.newaxis][:, :, column_indices])
         if len(value_array.shape) == 2:
             value_array = value_array[np.newaxis]
-        smoothed_data = pd.DataFrame(np.mean(value_array, axis=2))
+        smoothed_data, selective_std = weighted_mean_std(value_array, weights)
+        smoothed_data = pd.DataFrame(smoothed_data)
 
         selective_std = np.std(value_array, axis=2)
         # On the edges, the std is calculated from the reduced number of edge
@@ -187,22 +192,60 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         smoothed_data = smoothed_data[
             :, int(np.ceil(smoothed_data.shape[1]/3)-1):
                 int(2*np.ceil(smoothed_data.shape[1]/3)-1)]
-        if mode == smoothing_modes[3]:  # selective_moving_average
+        if mode == smoothing_modes[3]:  # weighted_moving_average
             selective_std = selective_std[
                 :, int(np.ceil(selective_std.shape[1]/3)-1):
                     int(2*np.ceil(selective_std.shape[1]/3)-1)]
 
     if interpolate:
         return (x_interpolated, smoothed_data)
-    elif mode == smoothing_modes[3]:  # selective_moving_average
+    elif mode == smoothing_modes[3]:  # weighted_moving_average
         return (smoothed_data, selective_std)
     else:
         return smoothed_data
 
 
+def weighted_mean_std(values, weights, std=True):
+    """
+    Calculate the weighted mean and (biased) standard deviation of values.
+
+    Parameters
+    ----------
+    values : ndarray
+        An n-dimensional array in the shape (..., M) with data rows with M
+        elements. Calculations are performed for each data row in the last
+        dimension of values.
+    weights : list of float
+        A list containing the weights used in the calculations. Must contain
+        M elements.
+    std : bool, optional
+        Decides if the weighted standard deviation is also calculated, default
+        is True.
+
+    Returns
+    -------
+    weighted_mean : ndarray
+        An (n-1)-dimensional array containing the weighted means for the data
+        rows, so has the shape of values without the last dimension.
+    weighted_std : ndarray
+        An (n-1)-dimensional array containing the weighted standard deviations
+        for the data rows, so has the shape of values without the last
+        dimension. Only in case of std=True.
+
+    """
+    weighted_mean = np.average(values, weights=weights, axis=-1)
+    if std:
+        weighted_std = np.sqrt(
+            np.average((values-weighted_mean[..., np.newaxis])**2,
+                       weights=weights, axis=-1))
+        return (weighted_mean, weighted_std)
+    else:
+        return weighted_mean
+
+
 def filtering(raw_data, mode, fill='NaN', **kwargs):
     """
-    Filters data rows with different algorithms.
+    Filter data rows with different algorithms.
 
     Filtered values are replaced by np.nan.
 
@@ -223,13 +266,12 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         where values are placed by np.nan.
     **kwargs for different filter modes
         spike_filter:
-            weights : list of bool
+            weights : list of float
                 The number of entries decide the window length used for
-                rolling average and standard deviation calculation. True means
-                that the value is used, False means the value is excluded, e.g.
-                [True, False, True] is a window of size 3 in which the center
-                point is exluded from the calculations. Default is [True, True,
-                False, True, True]
+                smoothing. A value > 0 means that the value is used with the
+                specified weight, a value of 0 means the value is excluded,
+                e.g. [1, 0, 1] is a window of size 3 in which the center point
+                is exluded from the calculations. Default is [1, 1, 0, 1, 1].
             std_factor : float
                 The number of standard deviations a value is allowed to be away
                 from the moving average before it is removed by the filter.
@@ -243,7 +285,7 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
             interpolate : boolean
                 False if x coordinate is evenly spaced. True if x coordinate is
                 not evenly spaced, then raw_data is interpolated to an evenly
-                spaced x coordinate. default=False
+                spaced x coordinate. Default is False
         max_thresh
             max:_thresh : float
                 The maximum threshold. Default is 1000.
@@ -261,14 +303,14 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
     filter_modes = ['spike_filter', 'max_thresh', 'min_thresh']
 
     if mode == filter_modes[0]:  # spike_filter
-        weights = kwargs.get('weights', [True, True, False, True, True])
+        weights = kwargs.get('weights', [1, 1, 0, 1, 1])
         window_size = len(weights)
         std_factor = kwargs.get('std_factor', 2)
         point_mirror = kwargs.get('point_mirror', False)
         interpolate = kwargs.get('interpolate', False)
 
         mov_avg, mov_std = smoothing(
-            raw_data, 'selective_moving_average', point_mirror=point_mirror,
+            raw_data, 'weighted_moving_average', point_mirror=point_mirror,
             interpolate=interpolate, weights=weights)
         
         diffs = np.absolute(raw_data - mov_avg)
