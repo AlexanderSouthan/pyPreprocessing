@@ -27,7 +27,7 @@ is given that should be used. Currently implemented methods are:
 * Savitzky-Golay
 * Moving median
 * Smoothing based on principal component analysis
-* Selective moving average
+* Weighted moving average
 
 ## Filtering (in smoothing.py)
 In contrast to smoothing, filtering mehods identify certain data points that
