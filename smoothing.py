@@ -165,7 +165,7 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         smoothed_data, selective_std = weighted_mean_std(value_array, weights)
         smoothed_data = pd.DataFrame(smoothed_data)
 
-        selective_std = np.std(value_array, axis=2)
+        # selective_std = np.std(value_array, axis=2)
         # On the edges, the std is calculated from the reduced number of edge
         # data points (only relevant if point_mirror is False).
         selective_std = np.concatenate((
