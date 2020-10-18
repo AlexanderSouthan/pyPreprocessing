@@ -5,16 +5,14 @@ baseline preprocessing of spectral data. See function docstrings for more
 detail.
 
 to do:
-    - Für ein einzelnes Spektrum testen
-    - rubberband durchtesten (konkave und konvexe Spektren testen,
-                              Spektren mit großer Bandbreite an Intensitäten
-      kokave Spektren evtl. durch concave hull:
+    - test convex_hull thorougly (concave and convex spectra, spectra with
+                                  big intensity range...)
+     - look into concave hull for concave spectra:
           https://pdfs.semanticscholar.org/2397/17005c3ebd5d6a42fc833daf97a0edee1ce4.pdf
-      und https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
+      and https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
     - Test methods for ascending and descending wavenumbers
-    - Negative Peaks berücksichtigen
-    - Konvergenzkriterium für alle hinzufügen
-
+    - Make usable for negative peaks
+    - Add convergence criteria for all methods
 """
 
 import numpy as np
@@ -31,7 +29,8 @@ from .smoothing import smoothing as smooth_spectra
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
                      **kwargs):
     """
-    Calculates baseline data for raw_data with generate_baseline(...).
+    Calculate baseline data for raw_data with generate_baseline(...).
+
     Takes the same arguments like generate_baseline, for details see
     docstring of generate_baseline.
     """
@@ -42,8 +41,7 @@ def correct_baseline(raw_data, mode, smoothing=True, transform=False,
 def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                       **kwargs):
     """
-    Calculates and returns baseline data on input datasets with different
-    algorithms.
+    Calculate baseline data on input datasets with different algorithms.
 
     Input data:
     -----------
@@ -77,7 +75,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
     convex_hull:
         wavenumbers: ndarray
             Numpy array containing wavenumbers or wavelengths of datasets.
-            Must have M elements. default=np.arange(M)
+            Must have M elements and must be sorted. default=np.arange(M)
     ALSS:
         lam: float
             default=10000
@@ -116,7 +114,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
     ModPoly, IModPoly:
         wavenumbers: ndarray
             Numpy array containing wavenumbers or wavelengths of datasets.
-            Must have M elements. default=np.arange(M)
+            Must have M elements and must be sorted. default=np.arange(M)
         n_iter: int
             default=100
         poly_order: int
@@ -124,17 +122,30 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
     PPF
         THIS IS STILL MISSING
     """
-
-    if smoothing:  # currently Savitzky-Golay only
+    # Optionallly, spectrum data is smoothed before beaseline calculation. This
+    # makes sense especially for baseline generation methods that have problems
+    # with noise. Currently Savitzky-Golay only.
+    if smoothing:
         savgol_window = kwargs.get('savgol_window', 9)
         savgol_order = kwargs.get('savol_order', 2)
         raw_data = smooth_spectra(raw_data, 'sav_gol',
                                   savgol_points=savgol_window,
                                   poly_order=savgol_order)
 
-    if transform:  # currently LLS transformation only
+    # Transformation makes sense for spectra that cover a broad range of peak
+    # intensities. Otherwise, small peaks may be more or less ignored during
+    # baseline calculation. Currently LLS transformation only.
+    if transform:
         spectra_minimum_value = raw_data.min()
         raw_data = transform_spectra(raw_data, 'log_log_sqrt')
+
+    # wavenumbers are used for convex_hull, ModPoly, IModPoly
+    if 'wavenumbers' in kwargs:
+        wavenumbers = kwargs.get('wavenumbers')
+        ascending_wn = (wavenumbers[1]-wavenumbers[0]) > 0
+    else:
+        wavenumbers = np.arange(raw_data.shape[1])
+        ascending_wn = True
 
     baseline_data = np.zeros_like(raw_data)
     baseline_modes = ['convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP',
@@ -142,23 +153,27 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
     if mode == baseline_modes[0]:  # convex_hull
         # based on (but improved a bit)
-        # https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
+        # https://dsp.stackexchange.com/questions/2725/
+        # how-to-perform-a-rubberband-correction-on-spectroscopic-data
 
-        # set mode specific parameters
-        wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
-        #############################
+        if ascending_wn:
+            raw_data = np.flip(raw_data, axis=0)
+            wavenumbers = np.flip(wavenumbers)
 
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
             hull_vertices = ConvexHull(
                 np.array(list(zip(wavenumbers, current_spectrum)))).vertices
+
             # Rotate convex hull vertices until they start from the lowest one
             hull_vertices = np.roll(hull_vertices, -np.argmin(hull_vertices))
+
             # split vertices into upper and lower part
             hull_vertices_section_1 = hull_vertices[:np.argmax(hull_vertices)
                                                     + 1]
             hull_vertices_section_2 = np.sort(
                 np.insert(hull_vertices[np.argmax(hull_vertices):], 0,
                           hull_vertices[0]))
+
             # calculate spectrum mean intensities of upper and lower vertices
             raw_mean_1 = np.mean(current_spectrum[hull_vertices_section_1])
             raw_mean_2 = np.mean(current_spectrum[hull_vertices_section_2])
@@ -174,11 +189,15 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 wavenumbers, np.flip(wavenumbers[baseline_vertices]),
                 np.flip(current_spectrum[baseline_vertices]))
 
+        if ascending_wn:
+            baseline_data = np.flip(baseline_data, axis=0)
+
     elif mode == baseline_modes[1]:  # ALSS
         # according to
         # "Baseline Correction with Asymmetric Least Squares Smoothing"
         # by P. Eilers and H. Boelens.
-        # https://zanran_storage.s3.amazonaws.com/www.science.uva.nl/ContentPages/443199618.pdf
+        # https://zanran_storage.s3.amazonaws.com/www.science.uva.nl/
+        # ContentPages/443199618.pdf
 
         # set mode specific parameters
         lam = kwargs.get('lam', 10000)
@@ -336,7 +355,6 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         #              Maybe also ModPoly from first source?
 
         # set mode specific parameters
-        wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
         n_iter = kwargs.get('n_iter', 100)
         poly_order = kwargs.get('poly_order', 5)
         #############################
@@ -378,7 +396,6 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         # according to Photonic Sensors 2018, 8(4), 332-340.
 
         # set mode specific parameters
-        # wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
         # n_iter = kwargs.get('n_iter', 100)
         savgol_window_deriv = 19
         savgol_order_deriv = 2
