@@ -1,6 +1,7 @@
 # pyPreprocessing
-For preprocessing of datasets, currently via baseline correction, smoothing,
-filtering, transformation, and normalization. It relies on numpy, pandas,
+For preprocessing of datasets like Raman spectra, infrared spectra, UV/Vis spectra,
+but also HPLC data and many other types of data, currently via baseline correction,
+smoothing, filtering, transformation, and normalization. It relies on numpy, pandas,
 scipy, tqdm and scikit-learn.
 
 ## Baseline correction (in baseline_correction.py)
