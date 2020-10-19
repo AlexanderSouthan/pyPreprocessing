@@ -9,7 +9,8 @@ Created on Sun Oct 18 22:01:43 2020
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pyPreprocessing.baseline_correction import generate_baseline
+from pyPreprocessing.baseline_correction import generate_baseline, derivative
+from pyPreprocessing.smoothing import smoothing
 from pyRegression.nonlinear_regression import calc_function
 
 
@@ -79,8 +80,8 @@ def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
     return np.array([wavenumbers, intensities])
 
 
-spectrum = simulate_spectrum([200, 500], [10, 20], [10, 5],
-                             baseline_parameters=[5, -0.01, 0.00003])
+spectrum = simulate_spectrum([200, 250, 500], [10, 5, 20], [10, 40, 5],
+                             baseline_parameters=[5, 0.01, 0.00003], noise_level=1)
 
 baseline_ALSS = np.squeeze(
     generate_baseline(
@@ -106,7 +107,13 @@ baseline_convex_hull = np.squeeze(
     generate_baseline(
         spectrum[1][np.newaxis], 'convex_hull', smoothing=True,
         wavenumbers=spectrum[0]))
+baseline_PPF = np.squeeze(
+    generate_baseline(
+        spectrum[1][np.newaxis], 'PPF', smoothing=True,
+        wavenumbers=spectrum[0], slope_threshold=0.07, step_threshold=0.01,
+        check_point_number=50, poly_order=5))
 
+plt.figure()
 plt.plot(spectrum[0], spectrum[1])
 plt.plot(spectrum[0], baseline_ALSS, label='ALSS')
 plt.plot(spectrum[0], baseline_iALSS, label='iALLS')
@@ -115,4 +122,10 @@ plt.plot(spectrum[0], baseline_SNIP, label='SNIP')
 plt.plot(spectrum[0], baseline_ModPoly, label='ModPoly')
 plt.plot(spectrum[0], baseline_IModPoly, label='IModPoly')
 plt.plot(spectrum[0], baseline_convex_hull, label='Convex hull')
+plt.plot(spectrum[0], baseline_PPF, label='PPF')
+# plt.plot(spectrum[0], np.squeeze(smoothing(spectrum[1][np.newaxis], 'sav_gol', savgol_points=19)))
 plt.legend()
+
+# plt.figure()
+# plt.plot(spectrum[0], np.squeeze(derivative(spectrum[0], spectrum[1][np.newaxis])))
+
