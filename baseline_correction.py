@@ -119,8 +119,19 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             default=100
         poly_order: int
             default=5
-    PPF
-        THIS IS STILL MISSING
+    PPF: 
+        All kwargs for IModPoly, see description there.
+        slope_threshold: float
+            The slope threshold. Lower slope values than the threshold are
+            understood as baseline. Default is 0.1.
+        check_point_number: int
+            The number of data points next to a potential segmentation point
+            that have to have a slope below slope_theshold in order for the
+            segmentation point to be validated. Default is 20.
+        step_threshold: float
+            The maximum vertical step tolerated between the individual
+            polynomial fitting curves of the picewise polynomial fitting.
+            Default is 0.005.
     """
     # Optionallly, spectrum data is smoothed before beaseline calculation. This
     # makes sense especially for baseline generation methods that have problems
@@ -139,7 +150,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         spectra_minimum_value = raw_data.min()
         raw_data = transform_spectra(raw_data, 'log_log_sqrt')
 
-    # wavenumbers are used for convex_hull, ModPoly, IModPoly
+    # wavenumbers are used for convex_hull, ModPoly, IModPoly, PPF
     if 'wavenumbers' in kwargs:
         wavenumbers = kwargs.get('wavenumbers')
         ascending_wn = (wavenumbers[1]-wavenumbers[0]) > 0
@@ -391,34 +402,173 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
 
-    # not functional yet
     elif mode == baseline_modes[7]:  # PPF
         # according to Photonic Sensors 2018, 8(4), 332-340.
 
         # set mode specific parameters
-        # n_iter = kwargs.get('n_iter', 100)
-        savgol_window_deriv = 19
-        savgol_order_deriv = 2
-        slope_threshold = 5
-        segment_points = 20
+        n_iter = kwargs.get('n_iter', 100)
         poly_order = kwargs.get('poly_order', 5)
+        slope_threshold = kwargs.get('slope_threshold', 0.01)
+        check_point_number = kwargs.get('check_point_number', 20)
+        step_threshold = kwargs.get('step_threshold', 0.005)
         #############################
-        raw_data_derivative = np.around(
-                savgol_filter(raw_data, savgol_window_deriv,
-                              savgol_order_deriv, deriv=1, axis=1), decimals=6)
+
+        if ascending_wn is False:
+            raw_data = np.flip(raw_data, axis=0)
+            wavenumbers = np.flip(wavenumbers)
+
+        # derivative is calculated for later use as criterium to distinguish
+        # between baseline and peaks
+        raw_data_derivative = derivative(wavenumbers, raw_data)
+
+        # The sign of the derivative changes from 1 to -1 at a peak maximum and
+        # from -1 to 1 upon the next increase of the intensities after a peak
         derivative_sign_changes = np.diff(
                 np.sign(raw_data_derivative), axis=1,
                 append=raw_data_derivative[:, -1, np.newaxis])
-        # peak_maxima = (derivative_sign_changes == -2)
-        peak_boundaries = (derivative_sign_changes == 2)
-#        check_points = np.roll(peak_boundaries, segment_points, axis=1)
 
-        deriv_diffs = raw_data_derivative - np.roll(
-            raw_data_derivative, segment_points, axis=1)
-        deriv_diffs_at_peak_bounds = np.abs(deriv_diffs * peak_boundaries)  # np.roll(peak_boundaries, segment_points, axis=1))
-        segment_points = (deriv_diffs_at_peak_bounds < slope_threshold) & (deriv_diffs_at_peak_bounds > 0)
+        # Interation through each spectrum at a time because the spectra will
+        # contain different amounts of segmentation points
+        for ii, (current_spectrum, curr_deriv,
+                 current_sign_change) in enumerate(zip(
+                     raw_data, raw_data_derivative, derivative_sign_changes)):
 
-        return segment_points
+            # Indexes of first points after peaks where the derivative becomes
+            # positive, those point to possible segmentation points
+            peak_boundaries = np.where(current_sign_change == 2)[0]
+
+            # Row and column index to select the next check_point_number points
+            # to find out whether the slopes next to the potential segmentation
+            # points are above the value of slope_threshold
+            rows = np.arange(check_point_number)[np.newaxis]
+            columns = peak_boundaries[:, np.newaxis] + np.arange(
+                check_point_number) + 1
+
+            # In case the check point indices extend over the end of the
+            # spectrum, those indexes are set to the last one of the spectrum
+            columns[columns>len(current_spectrum)-1] = len(current_spectrum)-1
+
+            # Check points, the neighboring check_point_number points right of
+            # peak_boundaries, are read out from the spectrum derivative
+            check_points = np.tile(curr_deriv, check_point_number).reshape(
+                check_point_number, -1)[rows, columns]
+
+            # Absolute differences of slopes at the potential segmentation
+            # points and the corresponding check points are calculated
+            deriv_diffs = np.abs(
+                check_points - curr_deriv[peak_boundaries][:, np.newaxis])
+
+            # Only those segmetation point candidates are kept where none of
+            # the next check_point_number points has a derivative greater than
+            # slope_threshold
+            segmentation_points = peak_boundaries[
+                ~np.any(deriv_diffs > slope_threshold, axis=1)] + check_point_number
+
+            # Segmentation points that extend over the spectrum end are set to
+            # the spectrum end
+            segmentation_points = np.where(
+                segmentation_points>len(current_spectrum)-1,
+                len(current_spectrum)-1, segmentation_points)
+
+            # Segemtation point indexes at 0 and len(current_spectrum) are
+            # added at the beginning and the end of segmentation_points
+            segmentation_points = np.insert(segmentation_points, 0, 0)
+            if len(segmentation_points) == 1:
+                segmentation_points = np.insert(segmentation_points, 1,
+                                                len(current_spectrum))
+            else:
+                segmentation_points[-1] = len(current_spectrum)
+            
+            # Drop duplicates that might have occurred due to far right
+            # peak_boundaries
+            segmentation_points = np.unique(segmentation_points)
+
+            # Used as the condition in the while loop trying to reduce the
+            # vertical steps/discontinuities between the different polynomial
+            # functions
+            step_above_thresh = True
+
+            # This controls the extension of the fitted regions over the
+            # segmentation points. Initialized with zeros, so the first fits
+            # are defined by the segmentation points.
+            segment_addition = np.zeros_like(segmentation_points)
+
+            # The maximum extension of the fitted segments is given by the
+            # distance of the segmentation points to the ends of the spectrum
+            max_segment_addition = np.abs(
+                np.array([0, len(current_spectrum)]) -
+                segmentation_points[:, np.newaxis]).min(axis=1)
+
+            while step_above_thresh:
+                baseline_sections = []
+                # The for loop iterates over the different fit regions. p1 and
+                # p2 are the segmentation points of the current interval to be
+                # fitted, a1 and a2 control if the fit runs over an extended
+                # interval.
+                for p1, p2, a1, a2 in zip(
+                        segmentation_points[:-1], segmentation_points[1:],
+                        segment_addition[:-1], segment_addition[1:]):
+                    # print('a1, a2: ', a1, ',', a2)
+                    # The indexes defining the subset of the spectrum to be
+                    # fitted
+                    fit_lim_1 = p1 - a1
+                    fit_lim_2 = p2 + a2
+
+                    # The fit itself making use of the IModPoly algorithm
+                    curr_section = np.squeeze(generate_baseline(
+                        current_spectrum[fit_lim_1:fit_lim_2][np.newaxis],
+                        'IModPoly', smoothing=False, transform=False,
+                        wavenumbers=wavenumbers[fit_lim_1:fit_lim_2],
+                        poly_order=poly_order, n_iter=n_iter))
+
+                    # The current fit result of the current spectrum subset is
+                    # collected
+                    if a2 == 0:
+                        baseline_sections.append(curr_section[a1:])
+                    else:
+                        baseline_sections.append(curr_section[a1:-a2])
+
+                # The different baseline sections are combined
+                baseline_data[ii] = np.concatenate(baseline_sections)
+
+                # The vertical steps/discontinuities between the individual
+                # baseline sections are calculated
+                vertical_steps = np.abs(
+                    baseline_data[ii, segmentation_points[1:-1]-1] -
+                    baseline_data[ii, segmentation_points[1:-1]])
+                vertical_steps = np.insert(vertical_steps, 0, 0)
+                vertical_steps = np.append(vertical_steps, 0)
+
+                # Check if the abortion criterium for the while loop can be
+                # triggered in case the discontiuities are all below the value
+                # of step_threshold
+                if vertical_steps.max() <= step_threshold:
+                    step_above_thresh = False
+                # Check if the segements have reached the end of the spectrum
+                # and thus cannot be extended any more
+                elif np.any(
+                        segment_addition[1:-1] == max_segment_addition[1:-1]):
+                    raise Exception('Reached the spectrum end while extending '
+                                    'the fitted region in order to improve '
+                                    'discontinuities, so PPF not possible '
+                                    'with this step_thresh.')
+                # Else at the segmentation points at which the vertical step is
+                # above the threshold, the subset used for the fit is extended
+                else:
+                    segment_addition = np.where(
+                        vertical_steps > step_threshold,
+                        segment_addition+1,
+                        segment_addition)
+
+            # print('vertical_steps', vertical_steps)
+            # print('segmentation_points', segmentation_points)
+            # print('segment_addition', segment_addition)
+
+        if ascending_wn is False:
+            baseline_data = np.flip(baseline_data, axis=0)
+            peak_boundaries = np.flip(peak_boundaries)
+
+        # return check_point_number
 
     else:
         raise ValueError('No valid baseline mode entered. Allowed modes are '
@@ -430,3 +580,45 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             min_value=spectra_minimum_value)
 
     return np.around(baseline_data, decimals=6)
+
+
+def derivative(x_values, y_values, order=1):
+    """
+    Calculate the derivative of numerical data.
+
+    Calculation is done by averaging the left and right derivative, only the
+    two outermost data points are calculated with only a one-sided derivative.
+    Therefore, the outermost order data points suffer from the numerical
+    calculation and might be grossly incorrect.
+
+    Parameters
+    ----------
+    x_values : ndarray
+        The x values. Must be a 1D array of shape (N,).
+    y_values : ndarray
+        A 2D array containing the y data. Must be of shape (M, N) with M data
+        rows to be derived that share the same x data.
+    order : int, optional
+        Gives the derivative order. Default is 1.
+
+    Returns
+    -------
+    derivative : ndarray
+        An ndarray of the shape (M, N) containing the derivative values.
+
+    """
+    x_spacing = np.diff(x_values)
+
+    for ii in range(order):
+        y_spacing = np.diff(y_values, axis=1)
+
+        left_derivative = y_spacing/x_spacing
+        right_derivative = np.roll(left_derivative, -1, axis=1)
+
+        derivative = (left_derivative[:, :-1] + right_derivative[:, :-1])/2
+        derivative = np.insert(derivative, 0, left_derivative[:, 0], axis=1)
+        derivative = np.insert(derivative, derivative.shape[1],
+                               left_derivative[:, -1], axis=1)
+        y_values = derivative
+
+    return derivative
