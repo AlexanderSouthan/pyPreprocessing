@@ -11,10 +11,10 @@ described below. Implemented baseline correction methods are:
 (https://zanran_storage.s3.amazonaws.com/www.science.uva.nl/ContentPages/443199618.pdf).
 Requires two paramters that have to be tuned to optimize the result. It can
 take a while to optimize the parameters, but then the results are reasonable
-most of the time. However, it has one more paramter compared to ALSS that has
-to be optimized manually.
+most of the time. 
 * iALSS, based on *Anal. Methods*, **2014**, *6*, 4402–4407. The authors claim
-that it is an improved ALSS method.
+that it is an improved ALSS method. However, it has one more paramter compared
+to ALSS that has to be optimized manually.
 * Doubly reweighted penalized least squares (drPLS), based on *Applied Optics*,
 **2019**, *58*, 3913-3920. Has two parameters controlling the result that have
 to be tuned manually. Deals rather nice with noisy spectra if the parameters
