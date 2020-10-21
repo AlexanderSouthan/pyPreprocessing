@@ -23,6 +23,7 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
+from pyRegression.nonlinear_regression import polynomial_fit
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
 
@@ -120,6 +121,18 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             default=100
         poly_order: int
             default=5
+        fixed_points: list of tuples, optional
+            Contains constraints for points that the baseline must
+            pass through. Each point is given by a tuple of two numbers,
+            the wavenumber and the intensity of the point. If no point
+            constraints are to be applied, this must be None. The
+            default is None.
+        fixed_slopes: list of tuples, optional
+            Contains constraints for slopes that the fit functions must
+            have at specific wavenumbers. Each slope is given by a tuple of
+            two numbers, the wavenumber and the slope. If no slope
+            constraints are to be applied, this must be None. The
+            default is None.
     PPF: 
         All kwargs for IModPoly, see description there.
         slope_threshold: float
@@ -369,6 +382,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         # set mode specific parameters
         n_iter = kwargs.get('n_iter', 100)
         poly_order = kwargs.get('poly_order', 5)
+        fixed_points = kwargs.get('fixed_points', None)
+        fixed_slopes = kwargs.get('fixed_slopes', None)
         #############################
 
         wavenumbers_start = wavenumbers
@@ -377,11 +392,18 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
             wavenumbers = wavenumbers_start
             for jj in range(int(n_iter)):
-                fit_coeffs = np.polynomial.polynomial.polyfit(wavenumbers,
-                                                              current_spectrum,
-                                                              poly_order)
-                fit_data = np.polynomial.polynomial.polyval(wavenumbers,
-                                                            fit_coeffs)
+                # The polynomial_fit method from pyRegression is only used if
+                # constraints are to be considered because the numpy polyfit
+                # method is faster.
+                if (fixed_points is not None) or (fixed_slopes is not None):
+                    fit_data, fit_coeffs = polynomial_fit(
+                        wavenumbers, current_spectrum, poly_order,
+                        fixed_points=fixed_points, fixed_slopes=fixed_slopes)
+                else:
+                    fit_coeffs = np.polynomial.polynomial.polyfit(
+                        wavenumbers, current_spectrum, poly_order)
+                    fit_data = np.polynomial.polynomial.polyval(wavenumbers,
+                                                                fit_coeffs)
 
                 if mode == baseline_modes[5]:  # ModPoly
                     dev = 0
