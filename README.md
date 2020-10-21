@@ -2,7 +2,9 @@
 For preprocessing of datasets like Raman spectra, infrared spectra, UV/Vis
 spectra, but also HPLC data and many other types of data, currently via
 baseline correction, smoothing, filtering, transformation, and normalization.
-It relies on numpy, pandas, scipy, tqdm and scikit-learn.
+It relies on numpy, pandas, scipy, tqdm and scikit-learn, but also on
+https://github.com/AlexanderSouthan/pyRegression for the introduction of
+constraints into the polynomial baseline estimation methods.
 
 ## Baseline correction (in baseline_correction.py)
 Before baseline correction, data can be smoothed or transformed by methods
@@ -29,6 +31,8 @@ robust in general.
 are both quite robust polynomial fitting algorithms that require only input on
 the polynomial order. IModPoly deals better with noise, but this can also be
 handled with ModPoly if the spectra are smoothed before baseline calculation.
+Both allow equality constraints in the fit so that the baseline passes specific
+points or has certain slopes at specific wavenumbers.
 * Convex hull (based on https://dsp.stackexchange.com/questions/2725/
 how-to-perform-a-rubberband-correction-on-spectroscopic-data). Quite
 interesting method that does not require any initial guess, but requires a
