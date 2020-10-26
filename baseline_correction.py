@@ -18,12 +18,13 @@ to do:
 
 import numpy as np
 from tqdm import tqdm
-from scipy.signal import savgol_filter
 from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
-from pyRegression.polynomial_regression import polynomial_fit, piecewise_polynomial_fit
+from pyRegression.polynomial_regression import (polynomial_fit,
+                                                piecewise_polynomial,
+                                                piecewise_polynomial_fit)
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
 
@@ -133,19 +134,28 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             two numbers, the wavenumber and the slope. If no slope
             constraints are to be applied, this must be None. The
             default is None.
-    PPF: 
-        All kwargs for IModPoly, see description there.
-        slope_threshold: float
-            The slope threshold. Lower slope values than the threshold are
-            understood as baseline. Default is 0.1.
-        check_point_number: int
-            The number of data points next to a potential segmentation point
-            that have to have a slope below slope_theshold in order for the
-            segmentation point to be validated. Default is 20.
-        step_threshold: float
-            The maximum vertical step tolerated between the individual
-            polynomial fitting curves of the picewise polynomial fitting.
-            Default is 0.005.
+    PPF:
+        wavenumbers: ndarray
+            Numpy array containing wavenumbers or wavelengths of datasets.
+            Must have M elements and must be sorted. default=np.arange(M)
+        segment_borders : list of int or float, optional
+            The values with respect to wavenumbers at which the data is divided
+            into segments. An arbitrary number of segment borders may be given,
+            but it is recommended to provide a sorted list in order to avoid
+            confusion. If the list is not sorted, it will be sorted. The
+            default is [wavenumbers[len(wavenumbers)//2]], resulting in a
+            segmentation in the middle of the data.
+        poly_orders : list of int
+            A list containing the polynomial orders used for the baseline fit.
+            Must contain one more element than segment_borders. Default is
+            [3, 3].
+        y_at_borders : None, or list of float or None, optional
+            May contain dependent variable values used as equality constraints
+            at the segment borders. The fits of both touching segments are
+            forced through the point given by the pair (segment border,
+            y_at_border). The list entries may also be None to state that at a
+            certain segment border, no constraint is to be applied. The default
+            is [0, 0].
     """
     # Optionallly, spectrum data is smoothed before beaseline calculation. This
     # makes sense especially for baseline generation methods that have problems
@@ -399,18 +409,20 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             wavenumbers = wavenumbers_start
             for jj in range(int(n_iter)):
                 if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
-                    # The polynomial_fit method from pyRegression is only used if
-                    # constraints are to be considered because the numpy polyfit
-                    # method is faster.
-                    if (fixed_points is not None) or (fixed_slopes is not None):
+                    # The polynomial_fit method from pyRegression is only used
+                    # if constraints are to be considered because the numpy
+                    # polyfit method is faster.
+                    if (fixed_points is not None) or (
+                            fixed_slopes is not None):
                         fit_data, fit_coeffs = polynomial_fit(
                             wavenumbers, current_spectrum, poly_order,
-                            fixed_points=fixed_points, fixed_slopes=fixed_slopes)
+                            fixed_points=fixed_points,
+                            fixed_slopes=fixed_slopes)
                     else:
                         fit_coeffs = np.polynomial.polynomial.polyfit(
                             wavenumbers, current_spectrum, poly_order)
-                        fit_data = np.polynomial.polynomial.polyval(wavenumbers,
-                                                                    fit_coeffs)
+                        fit_data = np.polynomial.polynomial.polyval(
+                            wavenumbers, fit_coeffs)
                 else:  # PPF
                     fit_data, fit_coeffs = piecewise_polynomial_fit(
                         wavenumbers, current_spectrum, segment_borders,
@@ -434,8 +446,13 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                           where=(current_spectrum >= (fit_data+dev)))
                 # previous_dev = dev
 
-            baseline_data[ii, :] = np.polynomial.polynomial.polyval(
-                wavenumbers_start, fit_coeffs)
+            if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
+                baseline_data[ii, :] = np.polynomial.polynomial.polyval(
+                    wavenumbers_start, fit_coeffs)
+            else:  # PPF
+                baseline_data[ii, :] = piecewise_polynomial(
+                    wavenumbers_start, fit_coeffs,
+                    segment_borders=segment_borders)
 
     # elif mode == baseline_modes[7]:  # PPF
     #     # according to Photonic Sensors 2018, 8(4), 332-340.
@@ -615,45 +632,3 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             min_value=spectra_minimum_value)
 
     return np.around(baseline_data, decimals=6)
-
-
-def derivative(x_values, y_values, order=1):
-    """
-    Calculate the derivative of numerical data.
-
-    Calculation is done by averaging the left and right derivative, only the
-    two outermost data points are calculated with only a one-sided derivative.
-    Therefore, the outermost order data points suffer from the numerical
-    calculation and might be grossly incorrect.
-
-    Parameters
-    ----------
-    x_values : ndarray
-        The x values. Must be a 1D array of shape (N,).
-    y_values : ndarray
-        A 2D array containing the y data. Must be of shape (M, N) with M data
-        rows to be derived that share the same x data.
-    order : int, optional
-        Gives the derivative order. Default is 1.
-
-    Returns
-    -------
-    derivative : ndarray
-        An ndarray of the shape (M, N) containing the derivative values.
-
-    """
-    x_spacing = np.diff(x_values)
-
-    for ii in range(order):
-        y_spacing = np.diff(y_values, axis=1)
-
-        left_derivative = y_spacing/x_spacing
-        right_derivative = np.roll(left_derivative, -1, axis=1)
-
-        derivative = (left_derivative[:, :-1] + right_derivative[:, :-1])/2
-        derivative = np.insert(derivative, 0, left_derivative[:, 0], axis=1)
-        derivative = np.insert(derivative, derivative.shape[1],
-                               left_derivative[:, -1], axis=1)
-        y_values = derivative
-
-    return derivative
