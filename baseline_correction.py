@@ -23,7 +23,7 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
-from pyRegression.nonlinear_regression import polynomial_fit
+from pyRegression.polynomial_regression import polynomial_fit
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
 

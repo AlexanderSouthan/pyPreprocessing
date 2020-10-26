@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from pyPreprocessing.baseline_correction import generate_baseline, derivative
 from pyPreprocessing.smoothing import smoothing
 from pyRegression.nonlinear_regression import calc_function
+from skimage.filters import threshold_otsu
 
 
 def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
@@ -83,6 +84,9 @@ def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
 spectrum = simulate_spectrum([200, 250, 500], [10, 5, 20], [10, 40, 5],
                              baseline_parameters=[5, 0.01, 0.00003], noise_level=1)
 
+smoothed_spectrum = smoothing(spectrum[1][np.newaxis], 'sav_gol')
+derived_spectrum = derivative(spectrum[0], smoothed_spectrum)
+
 baseline_ALSS = np.squeeze(
     generate_baseline(
         spectrum[1][np.newaxis], 'ALSS', smoothing=True))
@@ -113,19 +117,24 @@ baseline_PPF = np.squeeze(
         wavenumbers=spectrum[0], slope_threshold=0.07, step_threshold=0.01,
         check_point_number=50, poly_order=5))
 
-plt.figure()
-plt.plot(spectrum[0], spectrum[1])
-plt.plot(spectrum[0], baseline_ALSS, label='ALSS')
-plt.plot(spectrum[0], baseline_iALSS, label='iALLS')
-plt.plot(spectrum[0], baseline_drPLS, label='drPLS')
-plt.plot(spectrum[0], baseline_SNIP, label='SNIP')
-plt.plot(spectrum[0], baseline_ModPoly, label='ModPoly')
-plt.plot(spectrum[0], baseline_IModPoly, label='IModPoly')
-plt.plot(spectrum[0], baseline_convex_hull, label='Convex hull')
-plt.plot(spectrum[0], baseline_PPF, label='PPF')
-# plt.plot(spectrum[0], np.squeeze(smoothing(spectrum[1][np.newaxis], 'sav_gol', savgol_points=19)))
-plt.legend()
-
 # plt.figure()
-# plt.plot(spectrum[0], np.squeeze(derivative(spectrum[0], spectrum[1][np.newaxis])))
+# plt.plot(spectrum[0], spectrum[1])
+# plt.plot(spectrum[0], baseline_ALSS, label='ALSS')
+# plt.plot(spectrum[0], baseline_iALSS, label='iALLS')
+# plt.plot(spectrum[0], baseline_drPLS, label='drPLS')
+# plt.plot(spectrum[0], baseline_SNIP, label='SNIP')
+# plt.plot(spectrum[0], baseline_ModPoly, label='ModPoly')
+# plt.plot(spectrum[0], baseline_IModPoly, label='IModPoly')
+# plt.plot(spectrum[0], baseline_convex_hull, label='Convex hull')
+# plt.plot(spectrum[0], baseline_PPF, label='PPF')
+# # plt.plot(spectrum[0], np.squeeze(smoothing(spectrum[1][np.newaxis], 'sav_gol', savgol_points=19)))
+# plt.legend()
 
+plt.figure()
+plt.plot(spectrum[0], np.squeeze(derived_spectrum))
+
+plt.figure()
+plt.hist(np.squeeze(np.abs(derived_spectrum)), bins=100)
+
+deriv_hist = np.histogram(np.squeeze(np.abs(derived_spectrum)), bins=100)
+otsu = threshold_otsu(np.squeeze(np.abs(derived_spectrum)))
