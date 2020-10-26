@@ -1,10 +1,10 @@
 # pyPreprocessing
 For preprocessing of datasets like Raman spectra, infrared spectra, UV/Vis
 spectra, but also HPLC data and many other types of data, currently via
-baseline correction, smoothing, filtering, transformation, and normalization.
-It relies on numpy, pandas, scipy, tqdm and scikit-learn, but also on
-https://github.com/AlexanderSouthan/pyRegression for the introduction of
-constraints into the polynomial baseline estimation methods.
+baseline correction, smoothing, filtering, transformation, normalization and
+derivative. It relies on numpy, pandas, scipy, tqdm and scikit-learn, but also
+on https://github.com/AlexanderSouthan/pyRegression for the introduction of
+equality constraints into the polynomial baseline estimation methods.
 
 ## Baseline correction (in baseline_correction.py)
 Before baseline correction, data can be smoothed or transformed by methods
@@ -37,13 +37,11 @@ points or has certain slopes at specific wavenumbers.
 how-to-perform-a-rubberband-correction-on-spectroscopic-data). Quite
 interesting method that does not require any initial guess, but requires a
 convex baseline.
-* Piecewise polynomial fitting (PPF), based on *Photonic Sensors* **2018**,
-*8*(4), 332-340. This method relies on the IModPoly algorithm and tries to
-segment the spectrum into baseline separated areas which are then fitted one by
-one. The method to identify baseline segments relies on a threshold on the
-slope which is highly unreliable. Is also by far the slowest method due to a
-non-optimized method to reduce dicontinuities between the adjacent polynomial
-fits.
+* Piecewise polynomial fitting (PPF). This method relies on the IModPoly
+algorithm and segments the spectrum into baseline separated areas (given by
+user input) which are then fitted one by one. Discontinuities between the
+polynomial baseline segments can be reduced by applying equality constraints
+on the fits.
 
 ## Smoothing (in smooting.py)
 Data can be extended on the edges by point mirroring to reduce smoothing
@@ -72,3 +70,6 @@ Currently, the only implemented method is:
 Normalize the input data. Currently only one method is implemented:
 * Normalize the integral below the data to a certain value.
 
+## Derivative (in num_derive.py)
+Calculate the numerical derivative of data. Different derivative orders can be
+obtained.
