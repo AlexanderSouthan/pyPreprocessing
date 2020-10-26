@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Oct 18 22:01:43 2020
-
-@author: almami
-"""
 
 import numpy as np
 import pandas as pd
@@ -141,11 +136,11 @@ baseline_IModPoly = np.squeeze(
 #     generate_baseline(
 #         spectrum[1][np.newaxis], 'convex_hull', smoothing=True,
 #         wavenumbers=spectrum[0]))
-# baseline_PPF = np.squeeze(
-#     generate_baseline(
-#         spectrum[1][np.newaxis], 'PPF', smoothing=True,
-#         wavenumbers=spectrum[0], slope_threshold=0.07, step_threshold=0.01,
-#         check_point_number=50, poly_order=5))
+baseline_PPF = np.squeeze(
+    generate_baseline(
+        spectrum[1][np.newaxis], 'PPF', smoothing=True,
+        wavenumbers=spectrum[0], segment_borders=[500], poly_orders=[1, 1],
+        y_at_borders=[80]))
 
 plt.figure()
 plt.plot(spectrum[0], spectrum[1])
@@ -157,9 +152,9 @@ plt.plot(spectrum[0], smoothed_spectrum.T)
 # plt.plot(spectrum[0], baseline_ModPoly, label='ModPoly')
 plt.plot(spectrum[0], baseline_IModPoly, label='IModPoly')
 # plt.plot(spectrum[0], baseline_convex_hull, label='Convex hull')
-# plt.plot(spectrum[0], baseline_PPF, label='PPF')
+plt.plot(spectrum[0], baseline_PPF, label='PPF')
 # # plt.plot(spectrum[0], np.squeeze(smoothing(spectrum[1][np.newaxis], 'sav_gol', savgol_points=19)))
-# plt.legend()
+plt.legend()
 
 plt.figure()
 plt.plot(spectrum[0], np.squeeze(derived_spectrum))
