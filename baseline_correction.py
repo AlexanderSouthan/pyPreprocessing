@@ -23,7 +23,7 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
-from pyRegression.polynomial_regression import polynomial_fit
+from pyRegression.polynomial_regression import polynomial_fit, piecewise_polynomial_fit
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
 
@@ -373,7 +373,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
         baseline_data = raw_data
 
-    elif mode in baseline_modes[5:7]:  # ModPoly, IModPoly
+    elif mode in baseline_modes[5:8]:  # ModPoly, IModPoly, PPF
         # according to Applied Spectroscopy, 2007, 61 (11), 1225-1232.
         # without dev: Chemometrics and Intelligent Laboratory Systems 82
         #              (2006) 59– 65.
@@ -381,9 +381,15 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
         # set mode specific parameters
         n_iter = kwargs.get('n_iter', 100)
-        poly_order = kwargs.get('poly_order', 5)
-        fixed_points = kwargs.get('fixed_points', None)
-        fixed_slopes = kwargs.get('fixed_slopes', None)
+        if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
+            poly_order = kwargs.get('poly_order', 5)
+            fixed_points = kwargs.get('fixed_points', None)
+            fixed_slopes = kwargs.get('fixed_slopes', None)
+        if mode == baseline_modes[7]:  # PPF
+            segment_borders = kwargs.get(
+                'segment_borders', wavenumbers[len(wavenumbers)//2])
+            poly_orders = kwargs.get('poly_orders', [3, 3])
+            y_at_borders = kwargs.get('y_at_borders', [0, 0])
         #############################
 
         wavenumbers_start = wavenumbers
@@ -392,22 +398,28 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
             wavenumbers = wavenumbers_start
             for jj in range(int(n_iter)):
-                # The polynomial_fit method from pyRegression is only used if
-                # constraints are to be considered because the numpy polyfit
-                # method is faster.
-                if (fixed_points is not None) or (fixed_slopes is not None):
-                    fit_data, fit_coeffs = polynomial_fit(
-                        wavenumbers, current_spectrum, poly_order,
-                        fixed_points=fixed_points, fixed_slopes=fixed_slopes)
-                else:
-                    fit_coeffs = np.polynomial.polynomial.polyfit(
-                        wavenumbers, current_spectrum, poly_order)
-                    fit_data = np.polynomial.polynomial.polyval(wavenumbers,
-                                                                fit_coeffs)
+                if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
+                    # The polynomial_fit method from pyRegression is only used if
+                    # constraints are to be considered because the numpy polyfit
+                    # method is faster.
+                    if (fixed_points is not None) or (fixed_slopes is not None):
+                        fit_data, fit_coeffs = polynomial_fit(
+                            wavenumbers, current_spectrum, poly_order,
+                            fixed_points=fixed_points, fixed_slopes=fixed_slopes)
+                    else:
+                        fit_coeffs = np.polynomial.polynomial.polyfit(
+                            wavenumbers, current_spectrum, poly_order)
+                        fit_data = np.polynomial.polynomial.polyval(wavenumbers,
+                                                                    fit_coeffs)
+                else:  # PPF
+                    fit_data, fit_coeffs = piecewise_polynomial_fit(
+                        wavenumbers, current_spectrum, segment_borders,
+                        poly_orders, y_at_borders=y_at_borders,
+                        slope_at_borders=None)
 
                 if mode == baseline_modes[5]:  # ModPoly
                     dev = 0
-                else:  # IModPoly
+                else:  # IModPoly, PPF
                     residual = current_spectrum - fit_data
                     dev = residual.std()
                     # if abs((dev - previous_dev)/dev) < 0.01:
@@ -425,173 +437,173 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             baseline_data[ii, :] = np.polynomial.polynomial.polyval(
                 wavenumbers_start, fit_coeffs)
 
-    elif mode == baseline_modes[7]:  # PPF
-        # according to Photonic Sensors 2018, 8(4), 332-340.
+    # elif mode == baseline_modes[7]:  # PPF
+    #     # according to Photonic Sensors 2018, 8(4), 332-340.
 
-        # set mode specific parameters
-        n_iter = kwargs.get('n_iter', 100)
-        poly_order = kwargs.get('poly_order', 5)
-        slope_threshold = kwargs.get('slope_threshold', 0.01)
-        check_point_number = kwargs.get('check_point_number', 20)
-        step_threshold = kwargs.get('step_threshold', 0.005)
-        #############################
+    #     # set mode specific parameters
+    #     n_iter = kwargs.get('n_iter', 100)
+    #     poly_order = kwargs.get('poly_order', 5)
+    #     slope_threshold = kwargs.get('slope_threshold', 0.01)
+    #     check_point_number = kwargs.get('check_point_number', 20)
+    #     step_threshold = kwargs.get('step_threshold', 0.005)
+    #     #############################
 
-        if ascending_wn is False:
-            raw_data = np.flip(raw_data, axis=0)
-            wavenumbers = np.flip(wavenumbers)
+    #     if ascending_wn is False:
+    #         raw_data = np.flip(raw_data, axis=0)
+    #         wavenumbers = np.flip(wavenumbers)
 
-        # derivative is calculated for later use as criterium to distinguish
-        # between baseline and peaks
-        raw_data_derivative = derivative(wavenumbers, raw_data)
+    #     # derivative is calculated for later use as criterium to distinguish
+    #     # between baseline and peaks
+    #     raw_data_derivative = derivative(wavenumbers, raw_data)
 
-        # The sign of the derivative changes from 1 to -1 at a peak maximum and
-        # from -1 to 1 upon the next increase of the intensities after a peak
-        derivative_sign_changes = np.diff(
-                np.sign(raw_data_derivative), axis=1,
-                append=raw_data_derivative[:, -1, np.newaxis])
+    #     # The sign of the derivative changes from 1 to -1 at a peak maximum and
+    #     # from -1 to 1 upon the next increase of the intensities after a peak
+    #     derivative_sign_changes = np.diff(
+    #             np.sign(raw_data_derivative), axis=1,
+    #             append=raw_data_derivative[:, -1, np.newaxis])
 
-        # Interation through each spectrum at a time because the spectra will
-        # contain different amounts of segmentation points
-        for ii, (current_spectrum, curr_deriv,
-                 current_sign_change) in enumerate(zip(
-                     raw_data, raw_data_derivative, derivative_sign_changes)):
+    #     # Interation through each spectrum at a time because the spectra will
+    #     # contain different amounts of segmentation points
+    #     for ii, (current_spectrum, curr_deriv,
+    #              current_sign_change) in enumerate(zip(
+    #                  raw_data, raw_data_derivative, derivative_sign_changes)):
 
-            # Indexes of first points after peaks where the derivative becomes
-            # positive, those point to possible segmentation points
-            peak_boundaries = np.where(current_sign_change == 2)[0]
+    #         # Indexes of first points after peaks where the derivative becomes
+    #         # positive, those point to possible segmentation points
+    #         peak_boundaries = np.where(current_sign_change == 2)[0]
 
-            # Row and column index to select the next check_point_number points
-            # to find out whether the slopes next to the potential segmentation
-            # points are above the value of slope_threshold
-            rows = np.arange(check_point_number)[np.newaxis]
-            columns = peak_boundaries[:, np.newaxis] + np.arange(
-                check_point_number) + 1
+    #         # Row and column index to select the next check_point_number points
+    #         # to find out whether the slopes next to the potential segmentation
+    #         # points are above the value of slope_threshold
+    #         rows = np.arange(check_point_number)[np.newaxis]
+    #         columns = peak_boundaries[:, np.newaxis] + np.arange(
+    #             check_point_number) + 1
 
-            # In case the check point indices extend over the end of the
-            # spectrum, those indexes are set to the last one of the spectrum
-            columns[columns>len(current_spectrum)-1] = len(current_spectrum)-1
+    #         # In case the check point indices extend over the end of the
+    #         # spectrum, those indexes are set to the last one of the spectrum
+    #         columns[columns>len(current_spectrum)-1] = len(current_spectrum)-1
 
-            # Check points, the neighboring check_point_number points right of
-            # peak_boundaries, are read out from the spectrum derivative
-            check_points = np.tile(curr_deriv, check_point_number).reshape(
-                check_point_number, -1)[rows, columns]
+    #         # Check points, the neighboring check_point_number points right of
+    #         # peak_boundaries, are read out from the spectrum derivative
+    #         check_points = np.tile(curr_deriv, check_point_number).reshape(
+    #             check_point_number, -1)[rows, columns]
 
-            # Absolute differences of slopes at the potential segmentation
-            # points and the corresponding check points are calculated
-            deriv_diffs = np.abs(
-                check_points - curr_deriv[peak_boundaries][:, np.newaxis])
+    #         # Absolute differences of slopes at the potential segmentation
+    #         # points and the corresponding check points are calculated
+    #         deriv_diffs = np.abs(
+    #             check_points - curr_deriv[peak_boundaries][:, np.newaxis])
 
-            # Only those segmetation point candidates are kept where none of
-            # the next check_point_number points has a derivative greater than
-            # slope_threshold
-            segmentation_points = peak_boundaries[
-                ~np.any(deriv_diffs > slope_threshold, axis=1)] + check_point_number
+    #         # Only those segmetation point candidates are kept where none of
+    #         # the next check_point_number points has a derivative greater than
+    #         # slope_threshold
+    #         segmentation_points = peak_boundaries[
+    #             ~np.any(deriv_diffs > slope_threshold, axis=1)] + check_point_number
 
-            # Segmentation points that extend over the spectrum end are set to
-            # the spectrum end
-            segmentation_points = np.where(
-                segmentation_points>len(current_spectrum)-1,
-                len(current_spectrum)-1, segmentation_points)
+    #         # Segmentation points that extend over the spectrum end are set to
+    #         # the spectrum end
+    #         segmentation_points = np.where(
+    #             segmentation_points>len(current_spectrum)-1,
+    #             len(current_spectrum)-1, segmentation_points)
 
-            # Segemtation point indexes at 0 and len(current_spectrum) are
-            # added at the beginning and the end of segmentation_points
-            segmentation_points = np.insert(segmentation_points, 0, 0)
-            if len(segmentation_points) == 1:
-                segmentation_points = np.insert(segmentation_points, 1,
-                                                len(current_spectrum))
-            else:
-                segmentation_points[-1] = len(current_spectrum)
+    #         # Segemtation point indexes at 0 and len(current_spectrum) are
+    #         # added at the beginning and the end of segmentation_points
+    #         segmentation_points = np.insert(segmentation_points, 0, 0)
+    #         if len(segmentation_points) == 1:
+    #             segmentation_points = np.insert(segmentation_points, 1,
+    #                                             len(current_spectrum))
+    #         else:
+    #             segmentation_points[-1] = len(current_spectrum)
             
-            # Drop duplicates that might have occurred due to far right
-            # peak_boundaries
-            segmentation_points = np.unique(segmentation_points)
+    #         # Drop duplicates that might have occurred due to far right
+    #         # peak_boundaries
+    #         segmentation_points = np.unique(segmentation_points)
 
-            # Used as the condition in the while loop trying to reduce the
-            # vertical steps/discontinuities between the different polynomial
-            # functions
-            step_above_thresh = True
+    #         # Used as the condition in the while loop trying to reduce the
+    #         # vertical steps/discontinuities between the different polynomial
+    #         # functions
+    #         step_above_thresh = True
 
-            # This controls the extension of the fitted regions over the
-            # segmentation points. Initialized with zeros, so the first fits
-            # are defined by the segmentation points.
-            segment_addition = np.zeros_like(segmentation_points)
+    #         # This controls the extension of the fitted regions over the
+    #         # segmentation points. Initialized with zeros, so the first fits
+    #         # are defined by the segmentation points.
+    #         segment_addition = np.zeros_like(segmentation_points)
 
-            # The maximum extension of the fitted segments is given by the
-            # distance of the segmentation points to the ends of the spectrum
-            max_segment_addition = np.abs(
-                np.array([0, len(current_spectrum)]) -
-                segmentation_points[:, np.newaxis]).min(axis=1)
+    #         # The maximum extension of the fitted segments is given by the
+    #         # distance of the segmentation points to the ends of the spectrum
+    #         max_segment_addition = np.abs(
+    #             np.array([0, len(current_spectrum)]) -
+    #             segmentation_points[:, np.newaxis]).min(axis=1)
 
-            while step_above_thresh:
-                baseline_sections = []
-                # The for loop iterates over the different fit regions. p1 and
-                # p2 are the segmentation points of the current interval to be
-                # fitted, a1 and a2 control if the fit runs over an extended
-                # interval.
-                for p1, p2, a1, a2 in zip(
-                        segmentation_points[:-1], segmentation_points[1:],
-                        segment_addition[:-1], segment_addition[1:]):
-                    # print('a1, a2: ', a1, ',', a2)
-                    # The indexes defining the subset of the spectrum to be
-                    # fitted
-                    fit_lim_1 = p1 - a1
-                    fit_lim_2 = p2 + a2
+    #         while step_above_thresh:
+    #             baseline_sections = []
+    #             # The for loop iterates over the different fit regions. p1 and
+    #             # p2 are the segmentation points of the current interval to be
+    #             # fitted, a1 and a2 control if the fit runs over an extended
+    #             # interval.
+    #             for p1, p2, a1, a2 in zip(
+    #                     segmentation_points[:-1], segmentation_points[1:],
+    #                     segment_addition[:-1], segment_addition[1:]):
+    #                 # print('a1, a2: ', a1, ',', a2)
+    #                 # The indexes defining the subset of the spectrum to be
+    #                 # fitted
+    #                 fit_lim_1 = p1 - a1
+    #                 fit_lim_2 = p2 + a2
 
-                    # The fit itself making use of the IModPoly algorithm
-                    curr_section = np.squeeze(generate_baseline(
-                        current_spectrum[fit_lim_1:fit_lim_2][np.newaxis],
-                        'IModPoly', smoothing=False, transform=False,
-                        wavenumbers=wavenumbers[fit_lim_1:fit_lim_2],
-                        poly_order=poly_order, n_iter=n_iter))
+    #                 # The fit itself making use of the IModPoly algorithm
+    #                 curr_section = np.squeeze(generate_baseline(
+    #                     current_spectrum[fit_lim_1:fit_lim_2][np.newaxis],
+    #                     'IModPoly', smoothing=False, transform=False,
+    #                     wavenumbers=wavenumbers[fit_lim_1:fit_lim_2],
+    #                     poly_order=poly_order, n_iter=n_iter))
 
-                    # The current fit result of the current spectrum subset is
-                    # collected
-                    if a2 == 0:
-                        baseline_sections.append(curr_section[a1:])
-                    else:
-                        baseline_sections.append(curr_section[a1:-a2])
+    #                 # The current fit result of the current spectrum subset is
+    #                 # collected
+    #                 if a2 == 0:
+    #                     baseline_sections.append(curr_section[a1:])
+    #                 else:
+    #                     baseline_sections.append(curr_section[a1:-a2])
 
-                # The different baseline sections are combined
-                baseline_data[ii] = np.concatenate(baseline_sections)
+    #             # The different baseline sections are combined
+    #             baseline_data[ii] = np.concatenate(baseline_sections)
 
-                # The vertical steps/discontinuities between the individual
-                # baseline sections are calculated
-                vertical_steps = np.abs(
-                    baseline_data[ii, segmentation_points[1:-1]-1] -
-                    baseline_data[ii, segmentation_points[1:-1]])
-                vertical_steps = np.insert(vertical_steps, 0, 0)
-                vertical_steps = np.append(vertical_steps, 0)
+    #             # The vertical steps/discontinuities between the individual
+    #             # baseline sections are calculated
+    #             vertical_steps = np.abs(
+    #                 baseline_data[ii, segmentation_points[1:-1]-1] -
+    #                 baseline_data[ii, segmentation_points[1:-1]])
+    #             vertical_steps = np.insert(vertical_steps, 0, 0)
+    #             vertical_steps = np.append(vertical_steps, 0)
 
-                # Check if the abortion criterium for the while loop can be
-                # triggered in case the discontiuities are all below the value
-                # of step_threshold
-                if vertical_steps.max() <= step_threshold:
-                    step_above_thresh = False
-                # Check if the segements have reached the end of the spectrum
-                # and thus cannot be extended any more
-                elif np.any(
-                        segment_addition[1:-1] == max_segment_addition[1:-1]):
-                    raise Exception('Reached the spectrum end while extending '
-                                    'the fitted region in order to improve '
-                                    'discontinuities, so PPF not possible '
-                                    'with this step_thresh.')
-                # Else at the segmentation points at which the vertical step is
-                # above the threshold, the subset used for the fit is extended
-                else:
-                    segment_addition = np.where(
-                        vertical_steps > step_threshold,
-                        segment_addition+1,
-                        segment_addition)
+    #             # Check if the abortion criterium for the while loop can be
+    #             # triggered in case the discontiuities are all below the value
+    #             # of step_threshold
+    #             if vertical_steps.max() <= step_threshold:
+    #                 step_above_thresh = False
+    #             # Check if the segements have reached the end of the spectrum
+    #             # and thus cannot be extended any more
+    #             elif np.any(
+    #                     segment_addition[1:-1] == max_segment_addition[1:-1]):
+    #                 raise Exception('Reached the spectrum end while extending '
+    #                                 'the fitted region in order to improve '
+    #                                 'discontinuities, so PPF not possible '
+    #                                 'with this step_thresh.')
+    #             # Else at the segmentation points at which the vertical step is
+    #             # above the threshold, the subset used for the fit is extended
+    #             else:
+    #                 segment_addition = np.where(
+    #                     vertical_steps > step_threshold,
+    #                     segment_addition+1,
+    #                     segment_addition)
 
-            # print('vertical_steps', vertical_steps)
-            # print('segmentation_points', segmentation_points)
-            # print('segment_addition', segment_addition)
+    #         # print('vertical_steps', vertical_steps)
+    #         # print('segmentation_points', segmentation_points)
+    #         # print('segment_addition', segment_addition)
 
-        if ascending_wn is False:
-            baseline_data = np.flip(baseline_data, axis=0)
-            peak_boundaries = np.flip(peak_boundaries)
+    #     if ascending_wn is False:
+    #         baseline_data = np.flip(baseline_data, axis=0)
+    #         peak_boundaries = np.flip(peak_boundaries)
 
-        # return check_point_number
+    #     # return check_point_number
 
     else:
         raise ValueError('No valid baseline mode entered. Allowed modes are '
