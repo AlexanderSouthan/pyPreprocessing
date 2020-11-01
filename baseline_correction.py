@@ -174,7 +174,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         spectra_minimum_value = raw_data.min()
         raw_data = transform_spectra(raw_data, 'log_log_sqrt')
 
-    # wavenumbers are used for convex_hull, ModPoly, IModPoly, PPF
+    # wavenumbers are used for convex_hull, ModPoly, IModPoly, PPF, iALSS
     if 'wavenumbers' in kwargs:
         wavenumbers = kwargs.get('wavenumbers')
         ascending_wn = (wavenumbers[1]-wavenumbers[0]) > 0
@@ -275,7 +275,6 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         p = kwargs.get('p', 0.01)
         n_iter = kwargs.get('n_iter', 10)
         conv_crit = kwargs.get('conv_crit', 0.001)
-        wavenumbers = kwargs.get('wavenumbers', np.arange(raw_data.shape[1]))
         #############################
 
         L = raw_data.shape[1]
