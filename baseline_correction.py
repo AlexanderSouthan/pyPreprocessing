@@ -135,9 +135,11 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             constraints are to be applied, this must be None. The
             default is None.
     PPF:
-        wavenumbers: ndarray
+        wavenumbers: ndarray, optional
             Numpy array containing wavenumbers or wavelengths of datasets.
-            Must have M elements and must be sorted. default=np.arange(M)
+            Must have M elements and must be sorted. default=np.arange(M).
+        n_iter: int, optional
+            default=100
         segment_borders : list of int or float, optional
             The values with respect to wavenumbers at which the data is divided
             into segments. An arbitrary number of segment borders may be given,
@@ -145,17 +147,23 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             confusion. If the list is not sorted, it will be sorted. The
             default is [wavenumbers[len(wavenumbers)//2]], resulting in a
             segmentation in the middle of the data.
-        poly_orders : list of int
+        poly_orders : list of int, optional
             A list containing the polynomial orders used for the baseline fit.
             Must contain one more element than segment_borders. Default is
             [3, 3].
-        y_at_borders : None, or list of float or None, optional
+        fit_method: str, optional
+            Defines if the polynomial baseline fit of the segments is
+            performed by the ModPoly ('ModPoly') or IModPoly ('IModPoly')
+            algorithm. Default is 'ModPoly'.
+        y_at_borders : None, or list of float or None, or 'int_at_borders', 
+        optional
             May contain dependent variable values used as equality constraints
             at the segment borders. The fits of both touching segments are
             forced through the point given by the pair (segment border,
             y_at_border). The list entries may also be None to state that at a
             certain segment border, no constraint is to be applied. The default
-            is [0, 0].
+            is 'int_at_borders' which is the intensity value at the
+            segment_borders.
     """
     # Optionallly, spectrum data is smoothed before beaseline calculation. This
     # makes sense especially for baseline generation methods that have problems
@@ -192,7 +200,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         # how-to-perform-a-rubberband-correction-on-spectroscopic-data
 
         if ascending_wn:
-            raw_data = np.flip(raw_data, axis=0)
+            raw_data = np.flip(raw_data, axis=1)
             wavenumbers = np.flip(wavenumbers)
 
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
@@ -225,7 +233,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 np.flip(current_spectrum[baseline_vertices]))
 
         if ascending_wn:
-            baseline_data = np.flip(baseline_data, axis=0)
+            baseline_data = np.flip(baseline_data, axis=1)
 
     elif mode == baseline_modes[1]:  # ALSS
         # according to
@@ -396,16 +404,31 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             fixed_slopes = kwargs.get('fixed_slopes', None)
         if mode == baseline_modes[7]:  # PPF
             segment_borders = kwargs.get(
-                'segment_borders', wavenumbers[len(wavenumbers)//2])
+                'segment_borders', [wavenumbers[len(wavenumbers)//2]])
+
             poly_orders = kwargs.get('poly_orders', [3, 3])
-            y_at_borders = kwargs.get('y_at_borders', [0, 0])
+            y_at_borders = kwargs.get('y_at_borders', 'int_at_borders')
+            fit_method = kwargs.get('fit_method', 'ModPoly')
         #############################
+
+        if not ascending_wn:
+            raw_data = np.flip(raw_data, axis=1)
+            wavenumbers = np.flip(wavenumbers)
 
         wavenumbers_start = wavenumbers
         # previous_dev = 0
 
         for ii, current_spectrum in enumerate(tqdm(raw_data)):
             wavenumbers = wavenumbers_start
+
+            if mode == baseline_modes[7]:  # 'PPF'
+                if y_at_borders == 'int_at_borders':
+                    border_index = np.argmin(np.abs(
+                        wavenumbers[:, np.newaxis] - segment_borders), axis=0)
+                    y_at_borders_values = current_spectrum[border_index]
+                else:
+                    y_at_borders_values = y_at_borders
+
             for jj in range(int(n_iter)):
                 if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
                     # The polynomial_fit method from pyRegression is only used
@@ -425,12 +448,16 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 else:  # PPF
                     fit_data, fit_coeffs = piecewise_polynomial_fit(
                         wavenumbers, current_spectrum, segment_borders,
-                        poly_orders, y_at_borders=y_at_borders,
+                        poly_orders, y_at_borders=y_at_borders_values,
                         slope_at_borders=None)
 
-                if mode == baseline_modes[5]:  # ModPoly
+                # ModPoly or PPF with ModPoly
+                if (mode == baseline_modes[5]) or (
+                        (mode == baseline_modes[7]) and (fit_method=='ModPoly')
+                        ):
                     dev = 0
-                else:  # IModPoly, PPF
+                # IModPoly or PPF with IModPoly
+                else:
                     residual = current_spectrum - fit_data
                     dev = residual.std()
                     # if abs((dev - previous_dev)/dev) < 0.01:
@@ -452,6 +479,10 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
                 baseline_data[ii, :] = piecewise_polynomial(
                     wavenumbers_start, fit_coeffs,
                     segment_borders=segment_borders)
+
+        if not ascending_wn:
+            baseline_data = np.flip(baseline_data, axis=1)
+            # raw_data = np.flip(raw_data, axis=1)
 
     # elif mode == baseline_modes[7]:  # PPF
     #     # according to Photonic Sensors 2018, 8(4), 332-340.
