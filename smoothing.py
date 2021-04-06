@@ -261,9 +261,11 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         sharp peaks, 'max_thresh' for removal of values above or equal to a
         maximum threshold, 'min_thresh' for removal of values below or equal to
         a minumum threshold.
-    fill : str
-        Decides the way filtered points are replaced. Currently only 'NaN'
-        where values are placed by np.nan.
+    fill : str, optional
+        Decides the way filtered points are replaced. Currently 'NaN'
+        where values are replaced by np.nan, 'zeros' where values are
+        replaced by zeros, or 'mov_avg' (only for mode=='spike_filter') where
+        values are replaced by the weighted moving average.
     **kwargs for different filter modes
         spike_filter:
             weights : list of float
@@ -301,6 +303,10 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
 
     """
     filter_modes = ['spike_filter', 'max_thresh', 'min_thresh']
+    if fill == 'NaN':
+        fill_value = np.nan
+    elif fill == 'zeros':
+        fill_value = 0
 
     if mode == filter_modes[0]:  # spike_filter
         weights = kwargs.get('weights', [1, 1, 0, 1, 1])
@@ -312,20 +318,26 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         mov_avg, mov_std = smoothing(
             raw_data, 'weighted_moving_average', point_mirror=point_mirror,
             interpolate=interpolate, weights=weights)
-        
+
         diffs = np.absolute(raw_data - mov_avg)
-        raw_data[diffs > std_factor*mov_std] = np.nan
+        
+        if fill == 'mov_avg':
+            fill_value = mov_avg[diffs > std_factor*mov_std]
+        raw_data[diffs > std_factor*mov_std] = fill_value
         filtered_data = raw_data
+
     elif mode == filter_modes[1]:  # max_thresh
         maximum_threshold = kwargs.get('max_thresh', 1000)
         raw_data = raw_data.astype(float)
-        raw_data[raw_data > maximum_threshold] = np.nan
+        raw_data[raw_data > maximum_threshold] = fill_value
         filtered_data = raw_data
+
     elif mode == filter_modes[2]:  # min_thresh
         minimum_threshold = kwargs.get('min_thresh', 0)
         raw_data = raw_data.astype(float)
-        raw_data[raw_data < minimum_threshold] = np.nan
+        raw_data[raw_data < minimum_threshold] = fill_value
         filtered_data = raw_data
+
     else:
         raise ValueError('No valid filter mode entered. Allowed modes are '
                          '{0}'.format(filter_modes))

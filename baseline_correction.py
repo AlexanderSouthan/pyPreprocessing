@@ -27,6 +27,7 @@ from pyRegression.polynomial_regression import (polynomial_fit,
                                                 piecewise_polynomial_fit)
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
+from little_helpers.little_helpers import y_at_x
 
 
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
@@ -165,7 +166,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             is 'int_at_borders' which is the intensity value at the
             segment_borders.
     """
-    # Optionallly, spectrum data is smoothed before beaseline calculation. This
+    # Optionally, spectrum data is smoothed before beaseline calculation. This
     # makes sense especially for baseline generation methods that have problems
     # with noise. Currently Savitzky-Golay only.
     if smoothing:
@@ -423,9 +424,8 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
             if mode == baseline_modes[7]:  # 'PPF'
                 if y_at_borders == 'int_at_borders':
-                    border_index = np.argmin(np.abs(
-                        wavenumbers[:, np.newaxis] - segment_borders), axis=0)
-                    y_at_borders_values = current_spectrum[border_index]
+                    y_at_borders_values = y_at_x(
+                        segment_borders, wavenumbers, current_spectrum)
                 else:
                     y_at_borders_values = y_at_borders
 
