@@ -23,11 +23,11 @@ from scipy.sparse.linalg import spsolve
 from scipy.spatial import ConvexHull
 
 from pyRegression.polynomial_regression import (polynomial_fit,
-                                                piecewise_polynomial,
                                                 piecewise_polynomial_fit)
+from little_helpers.math_functions import piecewise_polynomial
 from .transform import transform as transform_spectra
 from .smoothing import smoothing as smooth_spectra
-from little_helpers.little_helpers import y_at_x
+from little_helpers.array_tools import y_at_x
 
 
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
