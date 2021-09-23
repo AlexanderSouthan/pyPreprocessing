@@ -69,7 +69,3 @@ Currently, the only implemented method is:
 ## Normalization (in transform.py)
 Normalize the input data. Currently only one method is implemented:
 * Normalize the integral below the data to a certain value.
-
-## Derivative (in num_derive.py)
-Calculate the numerical derivative of data. Different derivative orders can be
-obtained.
