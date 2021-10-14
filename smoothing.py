@@ -31,16 +31,21 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
     interpolate : boolean
         False if x coordinate is evenly spaced. True if x coordinate is not
         evenly spaced, then raw_data is interpolated to an evenly spaced
-        x coordinate. default=False
+        x coordinate. Default is False
     point_mirror : boolean
         Dataset is point reflected at both end points before smoothing to
         reduce artifacts at the data edges.
     **kwargs for interpolate=True
         x_coordinate : ndarray
             1D numpy array with shape (M,) used for interpolation.
-        data_points : int
+        data_points : int, optional
             number of data points returned after interpolation. Default is one
             order of magnitude more than M.
+        return_type : string, optional
+            Defines if the interpolated dataset with a number of data_points
+            is returned ('interp') or if the returned dataset has the same
+            dimensions and x_coordinates like the original dataset ('orig').
+            Default is 'interp'.
     **kwargs for different smoothing modes
         sav_gol:
             deriv : int
@@ -104,7 +109,6 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
              raw_data, (-np.flip(raw_data, axis=1) +
                         2*raw_data[:, -1, np.newaxis])[:, 1:]), axis=1)
         #raw_data = np.concatenate((-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[0],np.squeeze(raw_data.T),-np.squeeze(raw_data.T)[::-1]+2*np.squeeze(raw_data.T)[-1]))[np.newaxis]
-        print(raw_data)
 
     smoothing_modes = ['sav_gol', 'rolling_median', 'pca',
                        'weighted_moving_average']
@@ -198,7 +202,14 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
                     int(2*np.ceil(selective_std.shape[1]/3)-1)]
 
     if interpolate:
-        return (x_interpolated, smoothed_data)
+        return_type = kwargs.get('return_type', 'interp')
+        if return_type == 'interp':
+            return (x_interpolated, smoothed_data)
+        elif return_type == 'orig':
+            f = interp1d(x_interpolated, smoothed_data, kind='linear')
+            return (x_coordinate, f(x_coordinate))
+        else:
+            raise ValueError('No valid return_type given.')
     elif mode == smoothing_modes[3]:  # weighted_moving_average
         return (smoothed_data, selective_std)
     else:
@@ -255,7 +266,7 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         2D numpy array with the shape (N,M) containing N data rows to be
         filtered. Each data row is represented by row in numpy array and
         contains M values. If only one data row is present, raw_data has the
-        shape (1,M).
+        shape (1, M).
     mode : str
         Algorithm used for filtering. Allowed modes are 'spike_filter' for
         sharp peaks, 'max_thresh' for removal of values above or equal to a
@@ -268,31 +279,31 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         values are replaced by the weighted moving average.
     **kwargs for different filter modes
         spike_filter:
-            weights : list of float
+            weights : list of float, optional
                 The number of entries decide the window length used for
                 smoothing. A value > 0 means that the value is used with the
                 specified weight, a value of 0 means the value is excluded,
                 e.g. [1, 0, 1] is a window of size 3 in which the center point
                 is exluded from the calculations. Default is [1, 1, 0, 1, 1].
-            std_factor : float
+            std_factor : float, optional
                 The number of standard deviations a value is allowed to be away
                 from the moving average before it is removed by the filter.
                 Mean and standard deviation are calculated in a rolling fashion
                 so that only sharp peaks are found. Default is 2.
-            point_mirror : bool
+            point_mirror : bool, optional
                 Decides if the data edges are point mirrored before rolling
                 average. If True, estimates of mean and standard deviation also
                 at the edges are obtained. If False, data at the edges are kept
                 like in the original. Default is False.
-            interpolate : boolean
+            interpolate : boolean, optional
                 False if x coordinate is evenly spaced. True if x coordinate is
                 not evenly spaced, then raw_data is interpolated to an evenly
                 spaced x coordinate. Default is False
         max_thresh
-            max:_thresh : float
+            max:_thresh : float, optional
                 The maximum threshold. Default is 1000.
         min_thresh
-            min_thresh : float
+            min_thresh : float, optional
                 The minimum threshold. Default is 0.
 
     Returns
@@ -320,7 +331,7 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
             interpolate=interpolate, weights=weights)
 
         diffs = np.absolute(raw_data - mov_avg)
-        
+
         if fill == 'mov_avg':
             fill_value = mov_avg[diffs > std_factor*mov_std]
         raw_data[diffs > std_factor*mov_std] = fill_value
