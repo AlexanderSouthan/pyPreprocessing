@@ -5,36 +5,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from pyPreprocessing.baseline_correction import generate_baseline, derivative
+from pyPreprocessing.baseline_correction import generate_baseline
 from pyPreprocessing.smoothing import smoothing
 from pyRegression.nonlinear_regression import calc_function
-from skimage.filters import threshold_otsu, threshold_local, threshold_triangle
-from skimage.feature import canny, blob_log, blob_doh, blob_dog
-from skimage.restoration import estimate_sigma
-from scipy.signal import find_peaks
-
-def otsu(hist_x, hist_y):
-    total = np.sum(hist_y)
-    top = len(hist_y)
-    sumB = 0
-    wB = 0
-    maximum = 0.0
-    sum1 = np.dot(np.arange(top), hist_y)
-    
-    for ii in np.arange(top):
-        wF = total -wB
-        if (wB > 0) and (wF > 0):
-            mF = (sum1 - sumB) / wF
-            val = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
-            if val >= maximum:
-                level = ii
-                maximum = val
-        wB += hist_y[ii]
-        sumB += ii * hist_y[ii]
-    
-    otsu_thresh = hist_x[level]
-    
-    return otsu_thresh
+from little_helpers.num_derive import derivative
 
 
 def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
@@ -165,42 +139,6 @@ plt.plot(spectrum[0], np.squeeze(derived_spectrum_2))
 plt.figure()
 plt.plot(spectrum[0], spectrum[1]-baseline_IModPoly.T)
 plt.plot(spectrum[0], spectrum_clean[1])
-
-# plt.figure()
-# plt.hist(np.squeeze(np.abs(derived_spectrum)), bins=100)
-
-# deriv_hist = np.histogram(np.squeeze(np.abs(derived_spectrum)), bins=100)
-# hist_x = deriv_hist[1][:-1] + np.diff(deriv_hist[1])/2
-# hist_y = deriv_hist[0]
-# plt.bar(hist_x, hist_y, width=np.diff(deriv_hist[1]).mean())
-
-# plt.figure()
-# deriv_2_hist = np.histogram(np.squeeze(np.abs(derived_spectrum_2)), bins=100)
-# hist_x_2 = deriv_2_hist[1][:-1] + np.diff(deriv_2_hist[1])/2
-# hist_y_2 = deriv_2_hist[0]
-# plt.bar(hist_x_2, hist_y_2, width=np.diff(deriv_2_hist[1]).mean())
-
-# otsu_skimage = threshold_otsu(np.squeeze(np.abs(derived_spectrum)))
-
-# otsu_own = otsu(hist_x, hist_y)
-
-# thresh_local = threshold_local(np.abs(derived_spectrum), 21)
-# thresh_triangle = threshold_triangle(np.abs(derived_spectrum), nbins=100)
-
-# plt.figure()
-# plt.plot(spectrum[0], np.squeeze(np.abs(derived_spectrum)))
-# plt.axhline(thresh_triangle)
-
-# can = canny(spectrum[1][np.newaxis], sigma=1)
-# print('Summe', np.sum(can))
-
-# blob_log_r = blob_log(spectrum[1][np.newaxis])
-# blob_doh_r = blob_doh(spectrum[1][np.newaxis])
-# blob_dog_r = blob_dog(spectrum[1][np.newaxis])
-
-# peaks = find_peaks(spectrum[1])
-
-# noise = estimate_sigma(spectrum[1][np.newaxis])
 
 std_rolling = pd.Series(spectrum[1]).rolling(25, center=True).std()
 mean_rolling = pd.Series(spectrum[1]).rolling(25, center=True).mean()
