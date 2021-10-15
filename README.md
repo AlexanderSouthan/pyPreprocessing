@@ -49,7 +49,9 @@ on the fits.
 Data can be extended on the edges by point mirroring to reduce smoothing
 artifacts. Data output has the same dimensions like the input. In case of
 unevenly spaced data, a possibility to interpolate the data to even spacing
-is given that should be used. Currently implemented methods are:
+is given that should be used, and either the interpolated dataset is returned
+or the dataset is brought back to its original dimensions. Currently
+implemented methods are:
 * Savitzky-Golay
 * Moving median
 * Smoothing based on principal component analysis
