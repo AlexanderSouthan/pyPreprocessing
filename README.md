@@ -2,6 +2,7 @@
 [![Build Status](https://app.travis-ci.com/AlexanderSouthan/pyPreprocessing.svg?branch=master)](https://app.travis-ci.com/AlexanderSouthan/pyPreprocessing)
 
 # pyPreprocessing
+## General information
 For preprocessing of datasets like Raman spectra, infrared spectra, UV/Vis
 spectra, but also HPLC data and many other types of data, currently via
 baseline correction, smoothing, filtering, transformation, normalization and
@@ -10,5 +11,6 @@ on https://github.com/AlexanderSouthan/pyRegression for the introduction of
 equality constraints into the polynomial baseline estimation methods, and
 https://github.com/AlexanderSouthan/little_helpers.
 
-For the documentation, please visit: 
-https://github.com/AlexanderSouthan/little_helpers
+## Documentation
+Please visit:
+https://alexandersouthan.github.io/pyPreprocessing/
