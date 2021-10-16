@@ -3,17 +3,6 @@
 Provides functions correct_baseline and generate_baseline which can be used for
 baseline preprocessing of spectral data. See function docstrings for more
 detail.
-
-to do:
-    - test convex_hull thorougly (concave and convex spectra, spectra with
-                                  big intensity range...)
-     - look into concave hull for concave spectra:
-          https://pdfs.semanticscholar.org/2397/17005c3ebd5d6a42fc833daf97a0edee1ce4.pdf
-      and https://towardsdatascience.com/the-concave-hull-c649795c0f0f)
-    - Test methods for ascending and descending wavenumbers
-    - Make usable for negative peaks
-    - Add convergence criteria for all methods
-    - Have a look at dx.doi.org/10.1039/c3an00743j and dx.doi.org/10.3390/s20072015 for alternative methods
 """
 
 import numpy as np
