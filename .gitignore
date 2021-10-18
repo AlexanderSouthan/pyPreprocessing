@@ -1,2 +1,5 @@
 __pycache__
 to_do.txt
+.pylint.d
+/dist/
+/src/*.egg-info
