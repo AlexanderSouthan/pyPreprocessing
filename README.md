@@ -1,5 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://app.travis-ci.com/AlexanderSouthan/pyPreprocessing.svg?branch=master)](https://app.travis-ci.com/AlexanderSouthan/pyPreprocessing)
+[![codecov](https://codecov.io/gh/AlexanderSouthan/pyPreprocessing/branch/master/graph/badge.svg?token=7GN1K2MVJ3)](https://codecov.io/gh/AlexanderSouthan/pyPreprocessing)
 
 # pyPreprocessing
 ## General information
