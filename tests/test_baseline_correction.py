@@ -23,7 +23,7 @@ class TestBaselineCorrection(unittest.TestCase):
         widths = np.array([30, 500])
         noise_factor = 5
 
-        wavenumbers = np.linspace(1000, 2000, 1000)
+        wavenumbers = np.linspace(1000, 2000, 1001)
         intensities = (
             (amps*np.exp(-(wavenumbers[:, None]-centers)**2/widths)).sum(axis=1) +
             noise_factor * np.random.normal(size=wavenumbers.size))
@@ -47,6 +47,43 @@ class TestBaselineCorrection(unittest.TestCase):
             spectrum[None], 'IModPoly', wavenumbers=wavenumbers)
         baseline_ppf = baseline_correction.generate_baseline(
             spectrum[None], 'PPF', wavenumbers=wavenumbers)
+
+        spectrum_corrected = baseline_correction.correct_baseline(
+            spectrum[None], 'SNIP')
+
+        self.assertTrue(np.all(spectrum_corrected == spectrum-baseline_snip))
+
+        # test with trensformation
+        baseline_transform = baseline_correction.generate_baseline(
+            spectrum[None], 'SNIP', transform=True)
+
+        # test with flipped spectrum
+        baseline_snip_desc = baseline_correction.generate_baseline(
+            spectrum[::-1][None], 'SNIP')
+        self.assertTrue(np.all(baseline_snip_desc[0, ::-1] == baseline_snip))
+
+        # test with descending wavenumbers
+        baseline_modpoly_desc = baseline_correction.generate_baseline(
+            spectrum[::-1][None], 'ModPoly', wavenumbers=wavenumbers[::-1])
+        self.assertTrue(
+            np.all(baseline_modpoly_desc[0, ::-1] == baseline_modpoly))
+
+        # PPF with fixed border values
+        baseline_ppf_fixed = baseline_correction.generate_baseline(
+            spectrum[None], 'PPF', wavenumbers=wavenumbers, y_at_borders=[250],
+            segment_borders=[1400.0])
+        wn_idx = np.argmax(wavenumbers==1400)
+        self.assertEqual(baseline_ppf_fixed[0, wn_idx], 250)
+
+        # ModPoly with fixed points
+        baseline_modpoly_fixed = baseline_correction.generate_baseline(
+            spectrum[None], 'ModPoly', wavenumbers=wavenumbers,
+            fixed_points=[[1400, 250]])
+        self.assertEqual(baseline_modpoly_fixed[0, wn_idx], 250)
+
+        # test error messages
+        self.assertRaises(ValueError, baseline_correction.generate_baseline,
+                          spectrum[None], 'ModPoy')
 
         plt.plot(wavenumbers, spectrum)
         plt.plot(wavenumbers, baseline_snip.T, label='SNIP')
