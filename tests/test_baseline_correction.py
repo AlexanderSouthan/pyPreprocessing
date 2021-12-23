@@ -53,7 +53,7 @@ class TestBaselineCorrection(unittest.TestCase):
 
         self.assertTrue(np.all(spectrum_corrected == spectrum-baseline_snip))
 
-        # test with trensformation
+        # test with transformation
         baseline_transform = baseline_correction.generate_baseline(
             spectrum[None], 'SNIP', transform=True)
 
