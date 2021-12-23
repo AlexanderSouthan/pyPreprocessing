@@ -14,10 +14,10 @@ def transform(raw_data, mode, direction='direct', **kwargs):
     Parameters
     ----------
     raw_data : ndarray
-        2D numpy array with the shape (N,M) containing N data rows to be
+        2D numpy array with the shape (N, M) containing N data rows to be
         smoothed. Each data row is represented by row in numpy array and
         contains M values. If only one data row is present, raw_data has the
-        shape (1,M).
+        shape (1, M).
     mode : str
         Maths used for transformation. Allowed mode is 'log_log_sqrt' only at
         the moment which first takes the square root and then does the
@@ -72,6 +72,8 @@ def transform(raw_data, mode, direction='direct', **kwargs):
 
 
 def normalize(raw_data, mode, factor=1, **kwargs):
+    raw_data = np.asarray(raw_data)
+
     # list of allowed modes for normalization
     normalize_modes = ['total_intensity']
 
