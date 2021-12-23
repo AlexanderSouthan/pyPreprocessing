@@ -314,10 +314,14 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
 
     """
     filter_modes = ['spike_filter', 'max_thresh', 'min_thresh']
+    fill_values = ['NaN', 'zeros', 'mov_avg']
     if fill == 'NaN':
         fill_value = np.nan
     elif fill == 'zeros':
         fill_value = 0
+    elif ((fill not in fill_values) or
+          (fill == 'mov_avg' and mode != filter_modes[0])):
+        raise ValueError('No valid fill value given for this mode.')
 
     if mode == filter_modes[0]:  # spike_filter
         weights = kwargs.get('weights', [1, 1, 0, 1, 1])
@@ -326,31 +330,33 @@ def filtering(raw_data, mode, fill='NaN', **kwargs):
         point_mirror = kwargs.get('point_mirror', False)
         interpolate = kwargs.get('interpolate', False)
 
+        filtered_data = raw_data.copy()
         mov_avg, mov_std = smoothing(
-            raw_data, 'weighted_moving_average', point_mirror=point_mirror,
-            interpolate=interpolate, weights=weights)
+            filtered_data, 'weighted_moving_average',
+            point_mirror=point_mirror, interpolate=interpolate,
+            weights=weights)
 
-        diffs = np.absolute(raw_data - mov_avg)
+        diffs = np.absolute(filtered_data - mov_avg)
 
         if fill == 'mov_avg':
             fill_value = mov_avg[diffs > std_factor*mov_std]
-        raw_data[diffs > std_factor*mov_std] = fill_value
-        filtered_data = raw_data
+        filtered_data[diffs > std_factor*mov_std] = fill_value
+        # filtered_data = raw_data
 
     elif mode == filter_modes[1]:  # max_thresh
         maximum_threshold = kwargs.get('max_thresh', 1000)
-        raw_data = raw_data.astype(float)
-        raw_data[raw_data > maximum_threshold] = fill_value
-        filtered_data = raw_data
+        filtered_data = raw_data.copy().astype(float)
+        filtered_data[filtered_data > maximum_threshold] = fill_value
+        # filtered_data = raw_data
 
     elif mode == filter_modes[2]:  # min_thresh
         minimum_threshold = kwargs.get('min_thresh', 0)
-        raw_data = raw_data.astype(float)
-        raw_data[raw_data < minimum_threshold] = fill_value
-        filtered_data = raw_data
+        filtered_data = raw_data.copy().astype(float)
+        filtered_data[filtered_data < minimum_threshold] = fill_value
+        # filtered_data = raw_data
 
     else:
         raise ValueError('No valid filter mode entered. Allowed modes are '
                          '{0}'.format(filter_modes))
-        
+
     return filtered_data
