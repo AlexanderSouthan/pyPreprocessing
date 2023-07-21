@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from pyPreprocessing.baseline_correction import generate_baseline
 from pyPreprocessing.smoothing import smoothing
-from pyRegression.nonlinear_regression import calc_function
+from little_helpers.math_functions import gaussian
 from little_helpers.num_derive import derivative
 
 
@@ -52,12 +52,10 @@ def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
     # Calculate wavennumbers
     wavenumbers = np.linspace(wn_start, wn_end, num=data_points)
 
-    # Reshape Gaussian parameters and pass them to calc_function for pure
+    # Pass Gaussian paramters to gaussian for pure
     # spectrum intensities without noise and baseline contributions
-    gauss_parameters = np.stack(
-        [peak_amplitudes, peak_centers, np.zeros_like(peak_amplitudes),
-         peak_widths]).reshape((1, -1), order='F')
-    pure_intensities = calc_function(wavenumbers, gauss_parameters, 'Gauss')
+    pure_intensities = gaussian(wavenumbers, peak_amplitudes, peak_centers,
+                                np.zeros_like(peak_amplitudes), peak_widths)
 
     # Calculate noise as random Gaussian noise
     rng = np.random.default_rng()
@@ -65,8 +63,7 @@ def simulate_spectrum(peak_centers, peak_amplitudes, peak_widths,
 
     # Calculate baseline
     if baseline_type == 'polynomial':
-        baseline = calc_function(wavenumbers, baseline_parameters,
-                                 'polynomial')
+        baseline = np.polynomial.polynomial.polyval(wavenumbers, baseline_parameters)
     else:
         baseline = np.zeros_like(pure_intensities)
 
