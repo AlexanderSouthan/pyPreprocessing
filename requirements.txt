@@ -5,3 +5,4 @@ scikit-learn
 scipy
 tqdm
 pyDataFitting
+little_helpers
