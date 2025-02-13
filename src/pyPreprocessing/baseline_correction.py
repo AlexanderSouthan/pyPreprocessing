@@ -22,13 +22,22 @@ from little_helpers.array_tools import y_at_x
 def correct_baseline(raw_data, mode, smoothing=True, transform=False,
                      **kwargs):
     """
-    Calculate baseline data for raw_data with generate_baseline(...).
+    Subtract baseline data from raw_data.
 
-    Takes the same arguments like generate_baseline, for details see
-    docstring of generate_baseline.
+    Baseline data is either given explicitly with mode='direct', or is
+    calculated with generate_baseline(...). In the former case, it has to have
+    the same number of data points like raw_data has per dataset, or it has to
+    have the same shape like raw_data. In the latter case the function takes
+    the same arguments like generate_baseline, for details see docstring of
+    generate_baseline.
     """
-    return raw_data - generate_baseline(raw_data, mode, smoothing=smoothing,
-                                        transform=transform, **kwargs)
+    # baseline_data = np.array([])
+    if mode == 'direct':
+        baseline_data = kwargs.get('baseline_data')
+    else:
+        baseline_data = generate_baseline(raw_data, mode, smoothing=smoothing,
+                                     transform=transform, **kwargs)
+    return raw_data - baseline_data
 
 
 def generate_baseline(raw_data, mode, smoothing=True, transform=False,
@@ -44,7 +53,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
     mode: str
         Algorithm for baseline calculation. Allowed values:
         'convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP', 'ModPoly', 'IModPoly',
-        'PPF'.
+        'PPF', 'from_measurement'.
     smoothing: bool
         True if datasets should be smoothed before calculation (recommended),
         otherwise False.
@@ -154,6 +163,16 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
             certain segment border, no constraint is to be applied. The default
             is 'int_at_borders' which is the intensity value at the
             segment_borders.
+    from_measurement:
+        measured_baseline : ndarray, optional
+            The array contains known baseline data obtained through a
+            measurement valid for all datasets in raw_data. The length of the
+            array has to match the number of M data points in raw_data. The
+            default is a zero filled array, so this is only meaningful if
+            some baseline data is passed. Otherwise a zero baseline is
+            returned. The returned array has the same shape like raw_data and
+            can be subtracted from it directly. This is probably not so
+            terribly useful.
     """
     # Optionally, spectrum data is smoothed before beaseline calculation. This
     # makes sense especially for baseline generation methods that have problems
@@ -182,7 +201,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
     baseline_data = np.zeros_like(raw_data)
     baseline_modes = ['convex_hull', 'ALSS', 'iALSS', 'drPLS', 'SNIP',
-                      'ModPoly', 'IModPoly', 'PPF']
+                      'ModPoly', 'IModPoly', 'PPF', 'from_measurement']
 
     if mode == baseline_modes[0]:  # convex_hull
         # based on (but improved a bit)
@@ -472,6 +491,19 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
         if not ascending_wn:
             baseline_data = np.flip(baseline_data, axis=1)
             # raw_data = np.flip(raw_data, axis=1)
+
+    elif mode == baseline_modes[8]: # from_measurement
+        spectrum_number = len(raw_data)    
+        spectrum_points = raw_data.shape[1]
+        measured_baseline = kwargs.get(
+            'measured_baseline', np.zeros(spectrum_points))
+        if len(measured_baseline) != spectrum_points:
+            raise ValueError(
+                'The given baseline data consists of {} data points, but {} '
+                'were expected due to the shape of raw_data.'.format(
+                    len(measured_baseline), spectrum_points))
+        baseline_data = np.tile(measured_baseline, spectrum_number).reshape(
+            spectrum_number, -1)
 
     else:
         raise ValueError('No valid baseline mode entered. Allowed modes are '
