@@ -40,11 +40,11 @@ class TestTransform(unittest.TestCase):
         y = x**2 -30
 
         y_norm = transform.normalize([y], 'total_intensity', x_data=x)
-        self.assertAlmostEqual(np.trapz(y_norm, x=x, axis=1)[0], 1)
+        self.assertAlmostEqual(np.trapezoid(y_norm, x=x, axis=1)[0], 1)
 
         y_norm_2 = transform.normalize([y], 'total_intensity', x_data=x,
                                        factor=3.25)
-        self.assertAlmostEqual(np.trapz(y_norm_2, x=x, axis=1)[0], 3.25)
+        self.assertAlmostEqual(np.trapezoid(y_norm_2, x=x, axis=1)[0], 3.25)
 
         # test errors
         self.assertRaises(ValueError, transform.normalize, [y], 'tot_int')

@@ -130,7 +130,7 @@ def normalize(raw_data, mode, factor=1, **kwargs):
         else:
             limit_idx = [0, len(x_data)-1]
 
-        integral = np.trapz(
+        integral = np.trapezoid(
             raw_data[:, limit_idx[0]:limit_idx[1]+1],
             x=x_data[limit_idx[0]:limit_idx[1]+1], axis=1)[:, np.newaxis]
 

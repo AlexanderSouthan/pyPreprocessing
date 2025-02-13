@@ -128,8 +128,8 @@ def smoothing(raw_data, mode, interpolate=False, point_mirror=True, **kwargs):
         raw_data = pd.DataFrame(raw_data)
 
         edge_value_count = int((window-1)/2)
-        smoothed_data = raw_data.rolling(
-                window, axis=1, center=True).median().iloc[
+        smoothed_data = raw_data.T.rolling(
+                window, center=True).median().T.iloc[
                 :, edge_value_count:-edge_value_count]
 
         # On the data edges, the original data is used, so the edges are not
