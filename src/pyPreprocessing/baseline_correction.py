@@ -439,7 +439,7 @@ def generate_baseline(raw_data, mode, smoothing=True, transform=False,
 
             for jj in range(int(n_iter)):
                 if mode in baseline_modes[5:7]:  # ModPoly, IModPoly
-                    # The polynomial_fit method from pyRegression is only used
+                    # The polynomial_fit method from pyDataFitting is only used
                     # if constraints are to be considered because the numpy
                     # polyfit method is faster.
                     if (fixed_points is not None) or (
